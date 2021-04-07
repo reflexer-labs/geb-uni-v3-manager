@@ -2,7 +2,7 @@ pragma solidity ^0.6.7;
 
 import "ds-math/math.sol";
 import "geb/OracleRelayer.sol";
-import { DSToken } from "ds-token";
+import { DSToken } from "ds-token/src/token.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
