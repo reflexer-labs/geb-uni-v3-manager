@@ -1,0 +1,12 @@
+[submodule "lib/ds-test"]
+	path = lib/ds-test
+	url = https://github.com/dapphub/ds-test
+[submodule "lib/ds-math"]
+	path = lib/ds-math
+	url = https://github.com/dapphub/ds-math
+[submodule "lib/erc20"]
+	path = lib/erc20
+	url = https://github.com/reflexer-labs/erc20.git
+[submodule "lib/ds-stop"]
+	path = lib/ds-stop
+	url = https://github.com/reflexer-labs/ds-stop.git

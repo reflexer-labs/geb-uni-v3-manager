@@ -1,11 +1,17 @@
 pragma solidity ^0.6.7;
 
-// import "ds-math/math.sol";
+import "ds-math/math.sol";
+import "geb/OracleRelayer.sol";
+import { DSToken } from "ds-token";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
+
+abstract contract OracleLike {
+  function getResultWithValidity() public view virtual returns (uint256, bool);
+}
 
 /**
  * @notice This contracrt is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
@@ -44,25 +50,29 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   address public immutable token1;
 
   IUniswapV3Pool public pool;
+  OracleRelayer public oracleRelayer;
 
   int24 public currentLowerTick;
   int24 public currentUpperTick;
 
+  //The threshold varies from 1 - 1000, meaning than 1 = 0.1% and 1000 = 100%. This is nice because each tick represents 0.1% diff in the price space, which makes the calculation quite easy
   uint256 public threshold;
   uint256 public delay;
+  uint256 public lastRebalance;
 
   event ModifyParameters(bytes32 parameter, uint256 val);
   event AddAuthorization(address account);
   event RemoveAuthorization(address account);
 
   constructor(
-    bytes32 symbol_,
+    string memory name_,
+    string memory symbol_,
     uint256 threshold_,
     uint256 delay_,
     address token0_,
     address token1_,
     address pool_
-  ) public DSToken(symbol_) {
+  ) public DSToken(name_, symbol_) {
     threshold = threshold_;
     delay = delay_;
     token0 = token0_;
@@ -73,7 +83,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   //should I use auth imported from dsToken or other scheme?
   function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
     if (parameter == "threshold") {
-      require(data > 0 && data < 100, "GebUniswapv3LiquidtyManager/invalid-thresold");
+      require(data > 0 && data < 1000, "GebUniswapv3LiquidtyManager/invalid-thresold");
       threshold = data;
     }
     if (parameter == "delay") {
@@ -93,11 +103,11 @@ contract GebUniswapv3LiquidtyManager is DSToken {
 
     pool.mint(address(this), _currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(msg.sender));
 
-    uint256 _totalSupply = totalSupply;
-    if (_totalSupply == 0) {
+    uint256 __supply = _supply;
+    if (__supply == 0) {
       mintAmount = newLiquidity;
     } else {
-      mintAmount = DSMath.mul(uint256(newLiquidity), (totalSupply)) / _liquidity;
+      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / _liquidity;
     }
     // Mint users his tokens
     mint(msg.sender, mintAmount);
@@ -116,14 +126,14 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     )
   {
     (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
-    uint256 _totalSupply = totalSupply;
+    uint256 __supply = _supply;
 
     bytes32 positionID = keccak256(abi.encodePacked(address(this), _currentLowerTick, _currentUpperTick));
     (uint128 _liquidity, , , , ) = pool.positions(positionID);
 
     burn(msg.sender, burnAmount);
 
-    uint256 _liquidityBurned = DSMath.mul(burnAmount, _totalSupply) / _liquidity;
+    uint256 _liquidityBurned = DSMath.mul(burnAmount, __supply) / _liquidity;
     require(_liquidityBurned < uint256(0 - 1));
     liquidityBurned = uint128(_liquidityBurned);
 
@@ -143,22 +153,31 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   // This function read both redemption price and eth-usd price to calculate what the next tick should be
   function _getNextTicks() private returns (int24 _nLower, int24 _nUpper) {
     //1. Get current redemption Price in USD terms
-
+    uint256 redPrice = orcl.redemptionPrice();
     //2. Get usd-eth price
-
+    address osm = oracleRelayer.collateralTypes(bytes32("ETH-A")).orcl;
+    (uint256 ethUsh, bool valid) = OracleLike(osm).getResultWithValidity();
+    require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
     //3. Use 1 and 2 to get red price in eth terms
-
+    // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
-    uint160 sqrtPriceX96;
+    // I'm not sure id this formula gives a trustable sqrtPrice
+    // Somewhere in their code, I saw the formula:
+    //uint160((ratio >> 32) + (ratio % (1 << 32) == 0 ? 0 : 1));
+    //Some further research is needed to comprehend the differences between both
+    uint160 sqrtPriceX96 = uint160(sqrt(ethUsd / redPrice));
     //5. Calculate the tick that the redemption price is at
-    TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+    int24 redemptionTick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
     //5. Find + and - ticks according to threshold
-
-    return (int24(0), int24(0));
+    // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
+    int24 lowerTick = redemptionTick - threshold;
+    int24 upperTick = redemptionTick + threshold;
+    return (lowerTick, upperTick);
   }
 
   function rebalance() external {
+    require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
     // Read all this from storage to minimize SLOADs
     (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
 
@@ -244,6 +263,19 @@ contract GebUniswapv3LiquidtyManager is DSToken {
       if (amount1Owed > 0) {
         TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed);
       }
+    }
+  }
+
+  function sqrt(uint256 y) internal pure returns (uint256 z) {
+    if (y > 3) {
+      z = y;
+      uint256 x = y / 2 + 1;
+      while (x < z) {
+        z = x;
+        x = (y / x + x) / 2;
+      }
+    } else if (y != 0) {
+      z = 1;
     }
   }
 }

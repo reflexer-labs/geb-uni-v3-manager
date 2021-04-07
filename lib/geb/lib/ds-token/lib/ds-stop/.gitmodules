@@ -1,0 +1,9 @@
+[submodule "lib/ds-test"]
+	path = lib/ds-test
+	url = https://github.com/dapphub/ds-test
+[submodule "lib/ds-auth"]
+	path = lib/ds-auth
+	url = https://github.com/reflexer-labs/ds-auth.git
+[submodule "lib/ds-note"]
+	path = lib/ds-note
+	url = https://github.com/dapphub/ds-note
