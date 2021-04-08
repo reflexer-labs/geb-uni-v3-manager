@@ -7,3 +7,6 @@
 [submodule "lib/geb"]
 	path = lib/geb
 	url = git@github.com:reflexer-labs/geb.git
+[submodule "lib/geb-deploy"]
+	path = lib/geb-deploy
+	url = git@github.com:reflexer-labs/geb-deploy.git

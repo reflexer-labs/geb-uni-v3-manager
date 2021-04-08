@@ -1,8 +1,10 @@
-pragma solidity ^0.6.7;
+// SPDX-License-Identifier: GPL-2.0-or-later
+pragma solidity >=0.6.0;
 
-import { IUniswapV3Pool } from "../interfaces/IUniswapV3Pool.sol";
-import { IERC20Minimal } from "../interfaces/IERC20Minimal.sol";
+import "../interfaces/IERC20Minimal.sol";
 
+/// @title TransferHelper
+/// @notice Contains helper methods for interacting with ERC20 tokens that do not consistently return true/false
 library TransferHelper {
   /// @notice Transfers tokens from msg.sender to a recipient
   /// @dev Calls transfer on token contract, errors with TF if transfer fails
