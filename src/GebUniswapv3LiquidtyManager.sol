@@ -1,17 +1,13 @@
 pragma solidity ^0.6.7;
 
 import "ds-math/math.sol";
-import "geb/OracleRelayer.sol";
-import { DSToken } from "ds-token/src/token.sol";
+import "../lib/geb/src/OracleRelayer.sol";
+import { DSToken } from "../lib/ds-token/src/token.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
-
-abstract contract OracleLike {
-  function getResultWithValidity() public view virtual returns (uint256, bool);
-}
 
 /**
  * @notice This contracrt is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
@@ -24,7 +20,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
    * @notice Add auth to an account
    * @param account Account to add auth to
    */
-  function addAuthorization(address account) external isAuthorized {
+  function addAuthorization(address account) external isAuth {
     authorizedAccounts[account] = 1;
     emit AddAuthorization(account);
   }
@@ -33,15 +29,17 @@ contract GebUniswapv3LiquidtyManager is DSToken {
    * @notice Remove auth from an account
    * @param account Account to remove auth from
    */
-  function removeAuthorization(address account) external isAuthorized {
+  function removeAuthorization(address account) external isAuth {
     authorizedAccounts[account] = 0;
     emit RemoveAuthorization(account);
   }
 
   /**
    * @notice Checks whether msg.sender can call an authed function
+   * TODO chanhing this for now, because isAuthorized breaks the compiler due to a function with the same name on DSSTOP, which is inherited by DSToken
    **/
-  modifier isAuthorized() {
+
+  modifier isAuth() {
     require(authorizedAccounts[msg.sender] == 1, "OracleRelayer/account-not-authorized");
     _;
   }
@@ -81,7 +79,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   }
 
   //should I use auth imported from dsToken or other scheme?
-  function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
+  function modifyParameters(bytes32 parameter, uint256 data) external isAuth {
     if (parameter == "threshold") {
       require(data > 0 && data < 1000, "GebUniswapv3LiquidtyManager/invalid-thresold");
       threshold = data;
@@ -153,10 +151,10 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   // This function read both redemption price and eth-usd price to calculate what the next tick should be
   function _getNextTicks() private returns (int24 _nLower, int24 _nUpper) {
     //1. Get current redemption Price in USD terms
-    uint256 redPrice = orcl.redemptionPrice();
+    uint256 redPrice = oracleRelayer.redemptionPrice();
     //2. Get usd-eth price
-    address osm = oracleRelayer.collateralTypes(bytes32("ETH-A")).orcl;
-    (uint256 ethUsh, bool valid) = OracleLike(osm).getResultWithValidity();
+    (OracleLike osm, , ) = oracleRelayer.collateralTypes(bytes32("ETH-A"));
+    (uint256 ethUsd, bool valid) = osm.getResultWithValidity();
     require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
     //3. Use 1 and 2 to get red price in eth terms
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
@@ -171,8 +169,8 @@ contract GebUniswapv3LiquidtyManager is DSToken {
 
     //5. Find + and - ticks according to threshold
     // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
-    int24 lowerTick = redemptionTick - threshold;
-    int24 upperTick = redemptionTick + threshold;
+    int24 lowerTick = redemptionTick - int24(threshold);
+    int24 upperTick = redemptionTick + int24(threshold);
     return (lowerTick, upperTick);
   }
 
