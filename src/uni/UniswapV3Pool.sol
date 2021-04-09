@@ -296,10 +296,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     bool flippedUpper;
     if (liquidityDelta != 0) {
       uint32 blockTimestamp = _blockTimestamp();
-
       flippedLower = ticks.update(tickLower, tick, liquidityDelta, _feeGrowthGlobal0X128, _feeGrowthGlobal1X128, false, maxLiquidityPerTick);
       flippedUpper = ticks.update(tickUpper, tick, liquidityDelta, _feeGrowthGlobal0X128, _feeGrowthGlobal1X128, true, maxLiquidityPerTick);
-
       if (flippedLower) {
         tickBitmap.flipTick(tickLower, tickSpacing);
         secondsOutside.initialize(tickLower, tick, tickSpacing, blockTimestamp);

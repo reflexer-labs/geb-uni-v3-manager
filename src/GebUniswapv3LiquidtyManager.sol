@@ -12,7 +12,7 @@ import { TickMath } from "./uni/libraries/TickMath.sol";
 /**
  * @notice This contracrt is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapv3LiquidtyManager is DSToken {
+contract GebUniswapV3LiquidityManager is DSToken {
   // --- Auth ---
   mapping(address => uint256) public authorizedAccounts;
 
@@ -50,6 +50,8 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   IUniswapV3Pool public pool;
   OracleRelayer public oracleRelayer;
 
+  int24 public constant MAX_TICK = 887270;
+  int24 public constant MIN_TICK = -887270;
   int24 public currentLowerTick;
   int24 public currentUpperTick;
 
@@ -62,6 +64,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
   event AddAuthorization(address account);
   event RemoveAuthorization(address account);
 
+  //Might need some more input validation here.
   constructor(
     string memory name_,
     string memory symbol_,
@@ -69,13 +72,19 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     uint256 delay_,
     address token0_,
     address token1_,
-    address pool_
+    address pool_,
+    OracleRelayer relayer_
   ) public DSToken(name_, symbol_) {
     threshold = threshold_;
     delay = delay_;
     token0 = token0_;
     token1 = token1_;
     pool = IUniswapV3Pool(pool_);
+    oracleRelayer = relayer_;
+
+    //Initially setting ticks to its maximum range if the tick spacing is 10. Otherwise it needs to be slightly adjusted
+    currentLowerTick = MIN_TICK;
+    currentUpperTick = MAX_TICK;
   }
 
   //should I use auth imported from dsToken or other scheme?
@@ -99,8 +108,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     bytes32 positionID = keccak256(abi.encodePacked(address(this), _currentLowerTick, _currentUpperTick));
     (uint128 _liquidity, , , , ) = pool.positions(positionID);
 
-    pool.mint(address(this), _currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(msg.sender));
-
+    pool.mint(address(this), _currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(address(this)));
     uint256 __supply = _supply;
     if (__supply == 0) {
       mintAmount = newLiquidity;
@@ -109,9 +117,6 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     }
     // Mint users his tokens
     mint(msg.sender, mintAmount);
-
-    //We can either mint new liquidity right now or wait for the next rebalance
-    _uniMint(_currentLowerTick, _currentUpperTick, newLiquidity);
   }
 
   // Users use to remove liquidity to this pool
@@ -147,15 +152,21 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     );
   }
 
+  function getNextTicks() public returns (int24 _nLower, int24 _nUpper) {
+    return _getNextTicks();
+  }
+
   //TODO
   // This function read both redemption price and eth-usd price to calculate what the next tick should be
   function _getNextTicks() private returns (int24 _nLower, int24 _nUpper) {
     //1. Get current redemption Price in USD terms
-    uint256 redPrice = oracleRelayer.redemptionPrice();
+    uint256 redemptionPrice = oracleRelayer.redemptionPrice();
     //2. Get usd-eth price
-    (OracleLike osm, , ) = oracleRelayer.collateralTypes(bytes32("ETH-A"));
+    //TODO change to "ETH-A" for mainnet
+    (OracleLike osm, , ) = oracleRelayer.collateralTypes(bytes32("ETH"));
     (uint256 ethUsd, bool valid) = osm.getResultWithValidity();
     require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
+
     //3. Use 1 and 2 to get red price in eth terms
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
@@ -163,19 +174,20 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     // Somewhere in their code, I saw the formula:
     //uint160((ratio >> 32) + (ratio % (1 << 32) == 0 ? 0 : 1));
     //Some further research is needed to comprehend the differences between both
-    uint160 sqrtPriceX96 = uint160(sqrt(ethUsd / redPrice));
+    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsd * 2**96) / redemptionPrice));
     //5. Calculate the tick that the redemption price is at
-    int24 redemptionTick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+    int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
+    int24 spacedTick = targetTick - (targetTick % 10);
 
     //5. Find + and - ticks according to threshold
     // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
-    int24 lowerTick = redemptionTick - int24(threshold);
-    int24 upperTick = redemptionTick + int24(threshold);
+    int24 lowerTick = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
+    int24 upperTick = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
     return (lowerTick, upperTick);
   }
 
   function rebalance() external {
-    require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
+    // require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
     // Read all this from storage to minimize SLOADs
     (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
 
@@ -213,7 +225,6 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     uint128 newLiquidity
   ) private {
     (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, newLiquidity, abi.encode(address(this)));
-    // There might be outstanding amount. What to do?
   }
 
   function _uniBurn(
@@ -238,6 +249,8 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, requestAmount0, requestAmount1);
   }
 
+  // TODO think the best ux for sending tokens to the pool
+  // approving this contract and making a transferFrom or sending tokens directly and calling just transfer in the callback
   function uniswapV3MintCallback(
     uint256 amount0Owed,
     uint256 amount1Owed,
@@ -264,7 +277,7 @@ contract GebUniswapv3LiquidtyManager is DSToken {
     }
   }
 
-  function sqrt(uint256 y) internal pure returns (uint256 z) {
+  function sqrt(uint256 y) public pure returns (uint256 z) {
     if (y > 3) {
       z = y;
       uint256 x = y / 2 + 1;
