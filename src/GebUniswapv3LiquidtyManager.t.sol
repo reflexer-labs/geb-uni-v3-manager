@@ -147,60 +147,61 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsd * 2**96) / redemptionPrice));
     int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
     int24 spacedTick = targetTick - (targetTick % 10);
-    if (targetTick > 0) {
-      emit log_named_uint("targetTickP", getAbsInt24(spacedTick));
-    } else {
-      emit log_named_uint("targetTickN", getAbsInt24(spacedTick));
-    }
+    // if (targetTick > 0) {
+    //   emit log_named_uint("targetTickP", getAbsInt24(spacedTick));
+    // } else {
+    //   emit log_named_uint("targetTickN", getAbsInt24(spacedTick));
+    // }
 
     (, int24 currentTick, , , , , ) = pool.slot0();
-    emit log_named_uint("bal0", sqrt((ethUsd * 2**96) / redemptionPrice));
-    if (currentTick > 0) {
-      emit log_named_uint("tickP", uint256(currentTick));
-    } else {
-      emit log_named_uint("tickN", uint256(currentTick * int24(-1)));
-    }
+    // emit log_named_uint("bal0", sqrt((ethUsd * 2**96) / redemptionPrice));
+    // if (currentTick > 0) {
+    //   emit log_named_uint("tickP", uint256(currentTick));
+    // } else {
+    //   emit log_named_uint("tickN", uint256(currentTick * int24(-1)));
+    // }
 
     (int24 newLower, int24 newUpper) = manager.getNextTicks();
-    if (newLower > 0) {
-      emit log_named_uint("newLowerP", getAbsInt24(newLower));
-    } else {
-      emit log_named_uint("newLowerN", getAbsInt24(newLower));
-    }
-    if (newUpper > 0) {
-      emit log_named_uint("newUpperP", getAbsInt24(newUpper));
-    } else {
-      emit log_named_uint("newUpperN", getAbsInt24(newUpper));
-    }
-    emit log_named_uint("maxLiq", pool.maxLiquidityPerTick());
 
     manager.rebalance();
     bytes32 positionID = keccak256(abi.encodePacked(address(manager), newLower, newUpper));
     (uint128 _liquidity, , , , ) = pool.positions(positionID);
-    emit log_named_uint("endLiq", _liquidity);
-    emit log_named_uint("endLiq", 3.15 ether);
+    // emit log_named_uint("endLiq", _liquidity);
+    // emit log_named_uint("endLiq", 3.15 ether);
 
     uint256 bal0 = testRai.balanceOf(address(pool));
     uint256 bal1 = testWeth.balanceOf(address(pool));
     uint256 bal2 = testRai.balanceOf(address(manager));
     uint256 bal3 = testWeth.balanceOf(address(manager));
-    emit log_named_uint("bal0", bal0);
-    emit log_named_uint("bal1", bal1);
-    emit log_named_uint("bal2", bal2);
-    emit log_named_uint("bal3", bal3);
+    // emit log_named_uint("bal0", bal0);
+    // emit log_named_uint("bal1", bal1);
+    // emit log_named_uint("bal2", bal2);
+    // emit log_named_uint("bal3", bal3);
     assert(bal2 + bal0 == 10 ether);
     assert(bal3 + bal1 == 1 ether);
 
-    //with 50%
-    // targetTickN: 815650
-    // bal0: 154170194117
-    // tickN: 23028
-    // newLowerN: 887270
-    // newUpperN: 315650
-    // endLiq: 7115747430440957654013478
-    // endLiq: 3150000000000000000
+    (uint160 currPrice, , , , , , ) = pool.slot0();
+    uint256 liq = LiquidityAmounts.getLiquidityForAmounts(currPrice, TickMath.getSqrtRatioAtTick(newLower), TickMath.getSqrtRatioAtTick(newUpper), bal0, bal1);
+    // emit log_named_uint("liq", liq / _liquidity);
+    //A bit of rounding error
+    assertTrue(_liquidity / liq == 0);
+  }
 
-    assertTrue(false);
+  function test_burining_liquidity() public {
+    uint256 wethAmount = 1 ether;
+    uint256 raiAmount = 10 ether;
+    addLiquidity(); //Starting with a bit of liquidity
+    uint256 balanceBefore = testRai.balanceOf(address(this));
+
+    uint256 liq = manager.balanceOf(address(this));
+    //withdraw half of liquidity
+    manager.withdraw(liq / 2);
+    assertTrue(manager.balanceOf(address(this)) == liq / 2);
+
+    uint256 balanceAfter = testRai.balanceOf(address(this));
+    emit log_named_uint("bal", balanceAfter - balanceBefore);
+    emit log_named_uint("bal3", raiAmount / 2);
+    assertTrue((balanceAfter - balanceBefore) / raiAmount / 2 == 0);
   }
 
   function getAbsInt24(int24 val) internal returns (uint256 abs) {

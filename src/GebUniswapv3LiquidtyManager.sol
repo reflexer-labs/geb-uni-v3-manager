@@ -170,10 +170,6 @@ contract GebUniswapV3LiquidityManager is DSToken {
     //3. Use 1 and 2 to get red price in eth terms
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
-    // I'm not sure id this formula gives a trustable sqrtPrice
-    // Somewhere in their code, I saw the formula:
-    //uint160((ratio >> 32) + (ratio % (1 << 32) == 0 ? 0 : 1));
-    //Some further research is needed to comprehend the differences between both
     uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsd * 2**96) / redemptionPrice));
     //5. Calculate the tick that the redemption price is at
     int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
