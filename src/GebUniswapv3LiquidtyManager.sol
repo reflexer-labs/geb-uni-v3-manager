@@ -44,22 +44,51 @@ contract GebUniswapV3LiquidityManager is DSToken {
     _;
   }
 
-  address public immutable token0;
-  address public immutable token1;
+  /**
+  Pool information
+  **/
+  address public token0;
+  address public token1;
+  uint24 public fee;
+  int24 public tickSpacing;
+  uint128 public maxLiquidityPerTick; //Still unsure how this could affect this contract if a lot of uniswap's liquitidy is managed through it.
 
+  bool immutable raiIsT0; // Flag to identify weather Rai is t0 or t1. Changes the tick range we're working with
+
+  /**
+  Constant values
+  **/
+  uint256 constant MAX_THRESHOLD = 10000000; //100% - Not really achievable, because it'll reach max and min ticks
+  uint256 constant MIN_THRESHOLD = 10000; // 1%
+  uint256 constant MAX_DELAY = 10 days;
+  uint256 constant MIN_DELAY = 10 minutes;
+  int24 public constant MAX_TICK = 887272;
+  int24 public constant MIN_TICK = -887272;
+
+  /**
+  External contracts
+  **/
   IUniswapV3Pool public pool;
   OracleRelayer public oracleRelayer;
 
-  int24 public constant MAX_TICK = 887270;
-  int24 public constant MIN_TICK = -887270;
-  int24 public currentLowerTick;
-  int24 public currentUpperTick;
+  // Data structure to represent a position on uniswap pool
+  struct Position {
+    bytes32 id;
+    int24 lowerTick;
+    int24 upperTick;
+    uint128 uniLiquidity;
+  }
 
-  //The threshold varies from 1 - 1000, meaning than 1 = 0.1% and 1000 = 100%. This is nice because each tick represents 0.1% diff in the price space, which makes the calculation quite easy
+  //The threshold varies from 1000 to 10000000, meaning that 1000 = 0.1% and 10000000 = 100%. This is nice because each tick represents 0.1% diff in the price space, which makes the calculation quite easy
+  // Threshold could be moved to inside the Position struct in an eventual multi-position pool
   uint256 public threshold;
   uint256 public delay;
   uint256 public lastRebalance;
+  Position public position;
 
+  /**
+   Events
+  **/
   event ModifyParameters(bytes32 parameter, uint256 val);
   event AddAuthorization(address account);
   event RemoveAuthorization(address account);
@@ -68,34 +97,44 @@ contract GebUniswapV3LiquidityManager is DSToken {
   constructor(
     string memory name_,
     string memory symbol_,
+    address raiAddress,
     uint256 threshold_,
     uint256 delay_,
-    address token0_,
-    address token1_,
     address pool_,
     OracleRelayer relayer_
   ) public DSToken(name_, symbol_) {
+    require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
+    require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidtyManager/invalid-delay");
+    pool = IUniswapV3Pool(pool_);
+
+    //Getting Pool Information
+    // We might want to save gas and takes this values straight from the constructor, trusting that they are correct
+    token0 = pool.token0();
+    token1 = pool.token1();
+    fee = pool.fee();
+    tickSpacing = pool.tickSpacing();
+    maxLiquidityPerTick = pool.maxLiquidityPerTick();
+
     threshold = threshold_;
     delay = delay_;
-    token0 = token0_;
-    token1 = token1_;
-    pool = IUniswapV3Pool(pool_);
+    raiIsT0 = token0 == raiAddress ? true : false;
     oracleRelayer = relayer_;
 
-    //Initially setting ticks to its maximum range if the tick spacing is 10. Otherwise it needs to be slightly adjusted
-    currentLowerTick = MIN_TICK;
-    currentUpperTick = MAX_TICK;
+    //Starting position
+    (int24 _lower, int24 _upper) = getNextTicks();
+    position.lowerTick = _lower;
+    position.upperTick = _upper;
+    position.id = keccak256(abi.encodePacked(address(this), _lower, _upper));
   }
 
-  //should I use auth imported from dsToken or other scheme?
   function modifyParameters(bytes32 parameter, uint256 data) external isAuth {
     if (parameter == "threshold") {
-      require(data > 0 && data < 1000, "GebUniswapv3LiquidtyManager/invalid-thresold");
+      require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
       threshold = data;
     }
     if (parameter == "delay") {
-      require(data >= 360 && data <= 3600, "GebUniswapv3LiquidtyManager/invalid-delay");
-      threshold = data;
+      require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidtyManager/invalid-delay");
+      delay = data;
     } else revert("GebUniswapv3LiquidtyManager/modify-unrecognized-param");
     emit ModifyParameters(parameter, data);
   }
@@ -103,19 +142,21 @@ contract GebUniswapV3LiquidityManager is DSToken {
   // Users use to add liquidity to this pool
   // amount0 and amount1 can be calculated offchain and approved. This contract only performs calculations in terms of liquidity
   function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
-    (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
+    // Since the contract will change its position, we should take the opportunity to rebalance
+    (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), _currentLowerTick, _currentUpperTick));
-    (uint128 _liquidity, , , , ) = pool.positions(positionID);
+    uint128 previousLiquidity = position.uniLiquidity;
 
     pool.mint(address(this), _currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(address(this)));
+
+    //TODO double check this calculation
     uint256 __supply = _supply;
     if (__supply == 0) {
       mintAmount = newLiquidity;
     } else {
-      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / _liquidity;
+      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
     }
-    // Mint users his tokens
+    // Mint users their tokens
     mint(msg.sender, mintAmount);
   }
 
@@ -128,15 +169,12 @@ contract GebUniswapV3LiquidityManager is DSToken {
       uint128 liquidityBurned
     )
   {
-    (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
+    (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
     uint256 __supply = _supply;
-
-    bytes32 positionID = keccak256(abi.encodePacked(address(this), _currentLowerTick, _currentUpperTick));
-    (uint128 _liquidity, , , , ) = pool.positions(positionID);
 
     burn(msg.sender, burnAmount);
 
-    uint256 _liquidityBurned = DSMath.mul(burnAmount, __supply) / _liquidity;
+    uint256 _liquidityBurned = DSMath.mul(burnAmount, __supply) / position.uniLiquidity;
     require(_liquidityBurned < uint256(0 - 1));
     liquidityBurned = uint128(_liquidityBurned);
 
@@ -150,30 +188,31 @@ contract GebUniswapV3LiquidityManager is DSToken {
       uint128(amount0), // cast can't overflow
       uint128(amount1) // cast can't overflow
     );
+
+    //update position
+    // All other factors are still the same
+    (uint128 _liquidity, , , , ) = pool.positions(position.id);
+    position.uniLiquidity = _liquidity;
+  }
+
+  function getPrices() public returns (uint256 redemptionPrice, uint256 ethUsdPrice) {
+    redemptionPrice = oracleRelayer.redemptionPrice();
+    // TODO change to "ETH-A" for mainnet
+    (OracleLike osm, , ) = oracleRelayer.collateralTypes(bytes32("ETH"));
+    bool valid;
+    (ethUsdPrice, valid) = osm.getResultWithValidity();
+    require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
   }
 
   function getNextTicks() public returns (int24 _nLower, int24 _nUpper) {
-    return _getNextTicks();
-  }
+    (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
 
-  //TODO
-  // This function read both redemption price and eth-usd price to calculate what the next tick should be
-  function _getNextTicks() private returns (int24 _nLower, int24 _nUpper) {
-    //1. Get current redemption Price in USD terms
-    uint256 redemptionPrice = oracleRelayer.redemptionPrice();
-    //2. Get usd-eth price
-    //TODO change to "ETH-A" for mainnet
-    (OracleLike osm, , ) = oracleRelayer.collateralTypes(bytes32("ETH"));
-    (uint256 ethUsd, bool valid) = osm.getResultWithValidity();
-    require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
-
-    //3. Use 1 and 2 to get red price in eth terms
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
-    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsd * 2**96) / redemptionPrice));
+    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
     //5. Calculate the tick that the redemption price is at
     int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
-    int24 spacedTick = targetTick - (targetTick % 10);
+    int24 spacedTick = targetTick - (targetTick % tickSpacing);
 
     //5. Find + and - ticks according to threshold
     // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
@@ -185,32 +224,27 @@ contract GebUniswapV3LiquidityManager is DSToken {
   function rebalance() external {
     // require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
     // Read all this from storage to minimize SLOADs
-    (int24 _currentLowerTick, int24 _currentUpperTick) = (currentLowerTick, currentUpperTick);
+    (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
-    (int24 _nextLowerTick, int24 _nextUpperTick) = _getNextTicks();
+    (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
 
     if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
-      // We're just adjusting ticks
-      bytes32 positionID = keccak256(abi.encodePacked(address(this), _currentLowerTick, _currentUpperTick));
-      (uint128 _liquidity, , , , ) = pool.positions(positionID);
-      (uint256 collected0, uint256 collected1) = _uniBurn(_currentLowerTick, _currentUpperTick, _liquidity, address(this));
-
-      // Store new ticks
-      (currentLowerTick, currentUpperTick) = (_nextLowerTick, _nextUpperTick);
+      // Get the fees
+      (uint256 collected0, uint256 collected1) = _uniBurn(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
       //Figure how much liquity we can get from our current balances
       (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
-      // First, deposit as much as we can
       uint128 compoundLiquidity =
         LiquidityAmounts.getLiquidityForAmounts(
           sqrtRatioX96,
-          TickMath.getSqrtRatioAtTick(currentLowerTick),
-          TickMath.getSqrtRatioAtTick(currentUpperTick),
+          TickMath.getSqrtRatioAtTick(_nextLowerTick),
+          TickMath.getSqrtRatioAtTick(_nextUpperTick),
           collected0,
           collected1
         );
 
+      // Mint this new liquidity. _uniMint updates the position storage
       _uniMint(_nextLowerTick, _nextUpperTick, compoundLiquidity);
     }
   }
@@ -221,6 +255,14 @@ contract GebUniswapV3LiquidityManager is DSToken {
     uint128 newLiquidity
   ) private {
     (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, newLiquidity, abi.encode(address(this)));
+    position.lowerTick = lowerTick;
+    position.upperTick = upperTick;
+
+    bytes32 id = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
+    (uint128 _liquidity, , , , ) = pool.positions(id);
+
+    position.id = id;
+    position.uniLiquidity = _liquidity;
   }
 
   function _uniBurn(
