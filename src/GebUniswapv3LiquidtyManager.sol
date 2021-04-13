@@ -62,8 +62,8 @@ contract GebUniswapV3LiquidityManager is DSToken {
   uint256 constant MIN_THRESHOLD = 10000; // 1%
   uint256 constant MAX_DELAY = 10 days;
   uint256 constant MIN_DELAY = 10 minutes;
-  int24 public constant MAX_TICK = 887272;
-  int24 public constant MIN_TICK = -887272;
+  int24 public constant MAX_TICK = 887270;
+  int24 public constant MIN_TICK = -887270;
 
   /**
   External contracts
