@@ -93,7 +93,16 @@ contract GebUniswapV3LiquidityManager is DSToken {
   event AddAuthorization(address account);
   event RemoveAuthorization(address account);
 
-  //Might need some more input validation here.
+  /**
+   * @notice Constructor that sets initial parameters for this contract
+   * @param name_ The name of the ERC20 this contract will distribute
+   * @param symbol_ The symbik of the ERC20 this contract will distribute
+   * @param raiAddress The address of deployed RAI token
+   * @param threshold_ The threshold to set liquidity from the redemption price
+   * @param delay_ The minimum required time before rebalance can be called
+   * @param pool_ Address of the already deployed univ3 pool this contract will manage
+   * @param relayer_ Address of the already deployed the relayer to get prices from
+   */
   constructor(
     string memory name_,
     string memory symbol_,
@@ -125,6 +134,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
   }
 
+  /**
+   * @notice Modify the adjustable parameters
+   * @param parameter The variable to changes
+   * @param data The value to set parameter as
+   */
   function modifyParameters(bytes32 parameter, uint256 data) external isAuth {
     if (parameter == "threshold") {
       require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
@@ -137,8 +151,10 @@ contract GebUniswapV3LiquidityManager is DSToken {
     emit ModifyParameters(parameter, data);
   }
 
-  // Users use to add liquidity to this pool
-  // amount0 and amount1 can be calculated offchain and approved. This contract only performs calculations in terms of liquidity
+  /**
+   * @notice Add liquidity to this uniswap pool manager
+   * @param newLiquidity The amount of liquidty that the user wish to add
+   */
   function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
     // Since the contract will change its position, we should take the opportunity to rebalance
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
@@ -158,8 +174,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     mint(msg.sender, mintAmount);
   }
 
-  // Users use to remove liquidity to this pool
-  function withdraw(uint256 burnAmount)
+  /**
+   * @notice Remove liquidity and withdraw the underlying assests
+   * @param liquidityAmount The amount of liquidity to withdraw
+   */
+  function withdraw(uint256 liquidityAmount)
     external
     returns (
       uint256 amount0,
@@ -170,9 +189,9 @@ contract GebUniswapV3LiquidityManager is DSToken {
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
     uint256 __supply = _supply;
 
-    burn(msg.sender, burnAmount);
+    burn(msg.sender, liquidityAmount);
 
-    uint256 _liquidityBurned = DSMath.mul(burnAmount, __supply) / position.uniLiquidity;
+    uint256 _liquidityBurned = DSMath.mul(liquidityAmount, __supply) / position.uniLiquidity;
     require(_liquidityBurned < uint256(0 - 1));
     liquidityBurned = uint128(_liquidityBurned);
 
@@ -184,6 +203,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     position.uniLiquidity = _liquidity;
   }
 
+  /**
+   * @notice Public function to get both the redemption and ETH/USD price
+   * @return redemptionPrice The redemption prince in usd
+   * @return ethUsdPrice The eth/usd price
+   */
   function getPrices() public returns (uint256 redemptionPrice, uint256 ethUsdPrice) {
     redemptionPrice = oracleRelayer.redemptionPrice();
     // TODO change to "ETH-A" for mainnet
@@ -193,6 +217,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
   }
 
+  /**
+   * @notice Function that returns the next target ticks based on the redemption price
+   * @return _nLower The lower bound of the range
+   * @return _nUpper The upper bound of the range
+   */
   function getNextTicks() public returns (int24 _nLower, int24 _nUpper) {
     (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
 
@@ -210,6 +239,9 @@ contract GebUniswapV3LiquidityManager is DSToken {
     return (lowerTick, upperTick);
   }
 
+  /**
+   * @notice Public function to rebalance the pool position to the correct threshold from the redemption price
+   */
   function rebalance() external {
     // require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
     // Read all this from storage to minimize SLOADs
@@ -238,12 +270,18 @@ contract GebUniswapV3LiquidityManager is DSToken {
     }
   }
 
+  /**
+   * @notice Helper function to mint a new position on uniswap pool
+   * @param lowerTick The lower bound of the range to deposit the liquidity
+   * @param upperTick The upper bound of the range to deposit the liquidity
+   * @param totalLiquidity The total amount of liquidity to mint
+   */
   function _mintOnUniswap(
     int24 lowerTick,
     int24 upperTick,
-    uint128 newLiquidity
+    uint128 totalLiquidity
   ) private {
-    (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, newLiquidity, abi.encode(address(this)));
+    (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, totalLiquidity, abi.encode(address(this)));
     position.lowerTick = lowerTick;
     position.upperTick = upperTick;
 
@@ -253,17 +291,24 @@ contract GebUniswapV3LiquidityManager is DSToken {
     position.uniLiquidity = _liquidity;
   }
 
+  /**
+   * @notice Helper function to mint a new position on uniswap pool
+   * @param lowerTick The lower bound of the range to deposit the liquidity
+   * @param upperTick The upper bound of the range to deposit the liquidity
+   * @param burnedLiquidity The amount of liquidity to burn
+   * @param recipient The address to receive the collected amounts
+   */
   function _burnOnUniswap(
     int24 lowerTick,
     int24 upperTick,
-    uint128 liquidity,
+    uint128 burnedLiquidity,
     address recipient
   ) private returns (uint256 collected0, uint256 collected1) {
     // We can request MAX_INT, and Uniswap will just give whatever we're owed
     uint128 requestAmount0 = uint128(0) - 1;
     uint128 requestAmount1 = uint128(0) - 1;
 
-    (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, liquidity);
+    (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
 
     // If we're withdrawing for a specific user, then we only want to withdraw what they're owed
     if (recipient != address(this)) {
@@ -275,8 +320,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, requestAmount0, requestAmount1);
   }
 
-  // TODO think the best ux for sending tokens to the pool
-  // approving this contract and making a transferFrom or sending tokens directly and calling just transfer in the callback
+  /**
+   * @notice Callback used to transfer tokens to uniswap pool. Tokens need to be aproved before calling mint or deposit.
+   * @param amount0Owed The amount of token0 necessary to send to pool
+   * @param amount1Owed The amount of token1 necessary to send to pool
+   */
   function uniswapV3MintCallback(
     uint256 amount0Owed,
     uint256 amount1Owed,
@@ -303,6 +351,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     }
   }
 
+  /**
+   * @notice Calculates the sqrt of number
+   * @param y The number to calculate the square root of
+   * @return z The result of the calculation
+   */
   function sqrt(uint256 y) public pure returns (uint256 z) {
     if (y > 3) {
       z = y;
