@@ -75,6 +75,15 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracleRelayer);
   }
 
+  function test_inital_state() public {
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("lower", getAbsInt24(lowerTick));
+    emit log_named_uint("upperTick", getAbsInt24(upperTick));
+    emit log_named_bytes32("id", id);
+    //assertTrue(false);
+  }
+
   function test_sanity_uint_variables() public {
     uint256 _delay = manager.delay();
     assertTrue(_delay == delay);
@@ -121,6 +130,11 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
     //But we'll add an approximation
     manager.deposit(3.15 ether);
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    (uint128 _li, , , , ) = pool.positions(id);
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("_li", _li);
+
     uint256 liquidityReceived = manager.totalSupply();
     assertTrue(liquidityReceived == 3.15 ether);
 
@@ -138,7 +152,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     // emit log_named_uint("liq", _liquidity);
     // emit log_named_uint("bal0", bal0 / raiAmount);
     // emit log_named_uint("bal1", bal1 / wethAmount);
-    // assertTrue(false);
+    //assertTrue(false);
   }
 
   function test_rebalancing_pool() public {
@@ -198,14 +212,23 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     uint256 balanceBefore = testRai.balanceOf(address(this));
 
     uint256 liq = manager.balanceOf(address(this));
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    (uint128 _li, , , , ) = pool.positions(id);
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("_li", _li);
+
     //withdraw half of liquidity
     manager.withdraw(liq / 2);
     assertTrue(manager.balanceOf(address(this)) == liq / 2);
+
+    (uint128 _li2, , , , ) = pool.positions(id);
+    emit log_named_uint("_li2", _li2);
 
     uint256 balanceAfter = testRai.balanceOf(address(this));
     emit log_named_uint("bal", balanceAfter - balanceBefore);
     emit log_named_uint("bal3", raiAmount / 2);
     assertTrue((balanceAfter - balanceBefore) / raiAmount / 2 == 0);
+    //assertTrue(false);
   }
 
   function getAbsInt24(int24 val) internal returns (uint256 abs) {

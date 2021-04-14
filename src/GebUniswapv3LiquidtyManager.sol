@@ -122,9 +122,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     //Starting position
     (int24 _lower, int24 _upper) = getNextTicks();
-    position.lowerTick = _lower;
-    position.upperTick = _upper;
-    position.id = keccak256(abi.encodePacked(address(this), _lower, _upper));
+    position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
   }
 
   function modifyParameters(bytes32 parameter, uint256 data) external isAuth {
@@ -147,7 +145,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     uint128 previousLiquidity = position.uniLiquidity;
 
-    pool.mint(address(this), _currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(address(this)));
+    _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity);
 
     //TODO double check this calculation
     uint256 __supply = _supply;
@@ -178,16 +176,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
     require(_liquidityBurned < uint256(0 - 1));
     liquidityBurned = uint128(_liquidityBurned);
 
-    (amount0, amount1) = pool.burn(_currentLowerTick, _currentUpperTick, liquidityBurned);
-
-    // Withdraw tokens to user
-    pool.collect(
-      msg.sender,
-      _currentLowerTick,
-      _currentUpperTick,
-      uint128(amount0), // cast can't overflow
-      uint128(amount1) // cast can't overflow
-    );
+    (uint256 amount0, uint256 amount1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, liquidityBurned, msg.sender);
 
     //update position
     // All other factors are still the same
@@ -230,7 +219,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
       // Get the fees
-      (uint256 collected0, uint256 collected1) = _uniBurn(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+      (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
       //Figure how much liquity we can get from our current balances
       (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -244,12 +233,12 @@ contract GebUniswapV3LiquidityManager is DSToken {
           collected1
         );
 
-      // Mint this new liquidity. _uniMint updates the position storage
-      _uniMint(_nextLowerTick, _nextUpperTick, compoundLiquidity);
+      // Mint this new liquidity. _mintOnUniswap updates the position storage
+      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity);
     }
   }
 
-  function _uniMint(
+  function _mintOnUniswap(
     int24 lowerTick,
     int24 upperTick,
     uint128 newLiquidity
@@ -260,12 +249,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     bytes32 id = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
     (uint128 _liquidity, , , , ) = pool.positions(id);
-
     position.id = id;
     position.uniLiquidity = _liquidity;
   }
 
-  function _uniBurn(
+  function _burnOnUniswap(
     int24 lowerTick,
     int24 upperTick,
     uint128 liquidity,
