@@ -53,7 +53,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
   int24 public tickSpacing;
   uint128 public maxLiquidityPerTick; //Still unsure how this could affect this contract if a lot of uniswap's liquitidy is managed through it.
 
-  bool immutable raiIsT0; // Flag to identify weather Rai is t0 or t1. Changes the tick range we're working with
+  bool raiIsT0; // Flag to identify weather Rai is t0 or t1. Changes the tick range we're working with
 
   /**
   Constant values
@@ -156,12 +156,54 @@ contract GebUniswapV3LiquidityManager is DSToken {
    * @param newLiquidity The amount of liquidty that the user wish to add
    */
   function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
-    // Since the contract will change its position, we should take the opportunity to rebalance
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
     uint128 previousLiquidity = position.uniLiquidity;
 
     _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity);
+
+    //TODO double check this calculation
+    uint256 __supply = _supply;
+    if (__supply == 0) {
+      mintAmount = newLiquidity;
+    } else {
+      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
+    }
+    // Mint users their tokens
+    mint(msg.sender, mintAmount);
+  }
+
+  /**
+   * @notice Add liquidity to this uniswap pool manager
+   * @param newLiquidity The amount of liquidty that the user wish to add
+   */
+  function depositAndRabalance(uint128 newLiquidity) external returns (uint256 mintAmount) {
+    //Since we'll mint a new position, why not burn and mint according to the desired range
+    //Useful to benchmark the gas increase to the end user and possibly avoid to have to call rebalance at all.
+    // In case of a multi tranche scenario, rebalancing all might be too expensive, but we could consider a round-robin
+    (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
+    uint128 previousLiquidity = position.uniLiquidity;
+
+    (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
+    uint128 compoundLiquidity = 0;
+    //A possible optimization is only rebalance if the the tick diff is significant enough
+    if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
+      // Get the fees
+      (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+
+      //Figure how much liquity we can get from our current balances
+      (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+      compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+        sqrtRatioX96,
+        TickMath.getSqrtRatioAtTick(_nextLowerTick),
+        TickMath.getSqrtRatioAtTick(_nextUpperTick),
+        collected0,
+        collected1
+      );
+    }
+
+    _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity);
 
     //TODO double check this calculation
     uint256 __supply = _supply;
@@ -227,6 +269,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
+
     uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
     //5. Calculate the tick that the redemption price is at
     int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
@@ -236,6 +279,11 @@ contract GebUniswapV3LiquidityManager is DSToken {
     // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
     int24 lowerTick = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
     int24 upperTick = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
+    // In case rai is not token0, there's a need to invert the range
+    if (!raiIsT0) {
+      lowerTick *= -1;
+      upperTick *= -1;
+    }
     return (lowerTick, upperTick);
   }
 
