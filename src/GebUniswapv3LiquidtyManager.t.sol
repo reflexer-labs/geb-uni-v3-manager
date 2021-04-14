@@ -29,14 +29,14 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
   address token0;
   address token1;
 
-  uint256 threshold = 120000; //50%
-  uint256 delay = 360; //10 minutes
+  uint256 threshold = 500000; //50%
+  uint256 delay = 20 minutes; //10 minutes
 
   uint160 initialPoolPrice = 25054144837504793118641380156;
 
   function deployV3Pool(
-    address token0,
-    address token1,
+    address _token0,
+    address _token1,
     uint256 fee
   ) internal returns (address _pool) {
     UniswapV3Factory fac = new UniswapV3Factory();
@@ -67,10 +67,21 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
     // Deploy Pool
     pool = UniswapV3Pool(deployV3Pool(token0, token1, 500));
+    emit log_named_address("pol", address(pool));
+
     //We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
     //This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
     pool.initialize(uint160(25054144837504793118641380156));
-    manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", threshold, delay, token0, token1, address(pool), oracleRelayer);
+    manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracleRelayer);
+  }
+
+  function test_inital_state() public {
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("lower", getAbsInt24(lowerTick));
+    emit log_named_uint("upperTick", getAbsInt24(upperTick));
+    emit log_named_bytes32("id", id);
+    //assertTrue(false);
   }
 
   function test_sanity_uint_variables() public {
@@ -113,10 +124,17 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     //Those values are roughly the amount needed for 1e18 of liquidity
     testRai.transfer(address(manager), raiAmount);
     testWeth.transfer(address(manager), wethAmount);
+    address p = address(manager.pool());
+    emit log_named_address("pool", p);
 
     //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
     //But we'll add an approximation
     manager.deposit(3.15 ether);
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    (uint128 _li, , , , ) = pool.positions(id);
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("_li", _li);
+
     uint256 liquidityReceived = manager.totalSupply();
     assertTrue(liquidityReceived == 3.15 ether);
 
@@ -134,7 +152,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     // emit log_named_uint("liq", _liquidity);
     // emit log_named_uint("bal0", bal0 / raiAmount);
     // emit log_named_uint("bal1", bal1 / wethAmount);
-    // assertTrue(false);
+    //assertTrue(false);
   }
 
   function test_rebalancing_pool() public {
@@ -194,14 +212,23 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     uint256 balanceBefore = testRai.balanceOf(address(this));
 
     uint256 liq = manager.balanceOf(address(this));
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    (uint128 _li, , , , ) = pool.positions(id);
+    emit log_named_uint("liq", uniLiquidity);
+    emit log_named_uint("_li", _li);
+
     //withdraw half of liquidity
     manager.withdraw(liq / 2);
     assertTrue(manager.balanceOf(address(this)) == liq / 2);
+
+    (uint128 _li2, , , , ) = pool.positions(id);
+    emit log_named_uint("_li2", _li2);
 
     uint256 balanceAfter = testRai.balanceOf(address(this));
     emit log_named_uint("bal", balanceAfter - balanceBefore);
     emit log_named_uint("bal3", raiAmount / 2);
     assertTrue((balanceAfter - balanceBefore) / raiAmount / 2 == 0);
+    //assertTrue(false);
   }
 
   function getAbsInt24(int24 val) internal returns (uint256 abs) {
