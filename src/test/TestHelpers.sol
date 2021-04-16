@@ -31,4 +31,12 @@ contract PoolUser {
   function doDeposit(uint128 liquidityAmount) public {
     manager.deposit(liquidityAmount);
   }
+
+  function approve(
+    address token,
+    address who,
+    uint256 amount
+  ) public {
+    DSToken(token).approve(who, amount);
+  }
 }

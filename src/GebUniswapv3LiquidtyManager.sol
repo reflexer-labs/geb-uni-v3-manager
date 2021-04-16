@@ -170,7 +170,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
       mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
     }
     // Mint users their tokens
-    mint(msg.sender, mintAmount);
+    _mint(msg.sender, mintAmount);
   }
 
   /**
@@ -397,6 +397,12 @@ contract GebUniswapV3LiquidityManager is DSToken {
         TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed);
       }
     }
+  }
+
+  function _mint(address guy, uint256 wad) internal {
+    _balances[guy] = add(_balances[guy], wad);
+    _supply = add(_supply, wad);
+    emit Mint(guy, wad);
   }
 
   /**
