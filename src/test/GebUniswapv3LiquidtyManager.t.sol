@@ -1,6 +1,7 @@
 pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
+import "ds-math/math.sol";
 import "../GebUniswapv3LiquidtyManager.sol";
 import "../../lib/geb-deploy/src/test/GebDeploy.t.base.sol";
 import "../uni/UniswapV3Factory.sol";
@@ -47,6 +48,12 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     u1 = new PoolUser(manager);
     u2 = new PoolUser(manager);
     u3 = new PoolUser(manager);
+
+    // address[] memory adds = new address[](3);
+    // adds[0] = address(u1);
+    // adds[1] = address(u2);
+    // adds[2] = address(u3);
+    // helper_transferAndApprove(adds);
   }
 
   function test_sanity_uint_variables() public {
@@ -214,13 +221,13 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
   }
 
   function test_multiple_users_adding_liquidity() public {
-    helper_addLiquidity(); //Starting with a bit of liquidity
+    // helper_addLiquidity(); //Starting with a bit of liquidity
 
     (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
 
     //Should make market price increase
     uint256 u1_raiAmount = 5 ether;
-    uint256 u1_wethAmount = 1 ether;
+    uint256 u1_wethAmount = 2 ether;
     //Before making deposit, we need to send tokens to the pool
     //Those values are roughly the amount needed for 1e18 of liquidity
     testWeth.transfer(address(manager), u1_raiAmount);
@@ -230,18 +237,24 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
     uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, 5 ether, 1 ether);
 
+    uint128 max = pool.maxLiquidityPerTick();
+    emit log_named_uint("max", max);
+    emit log_named_uint("u1", u1_liquidity);
+    emit log_named_uint("uni", uniLiquidity1);
+
     u1.doDeposit(u1_liquidity);
 
-    //totalSupply should be equal both liquidities
-    // assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
+    // totalSupply should be equal both liquidities
+    assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
     //Getting new pool information
     (bytes32 _, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
-    // assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
+    assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
 
     //Pool position shouldn't have changed
-    // assertTrue(lowerTick == lowerTick2);
-    // assertTrue(upperTick == upperTick2);
+    assertTrue(lowerTick == lowerTick2);
+    assertTrue(upperTick == upperTick2);
+    // assertTrue(false);
   }
 
   // HELPER FUNCTIONS
@@ -271,6 +284,16 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
   function helper_changeRedemptionPrice(uint256 newPrice) public {
     oracleRelayer.modifyParameters("redemptionPrice", newPrice);
   }
+
+  // function helper_transferAndApprove(address[] memory adds) public {
+  //   for (uint256 i = 0; i < adds.length; i++) {
+  //     testWeth.transfer(adds[i], 3 ether);
+  //     testRai.transfer(adds[i], 3 ether);
+
+  //     PoolUser(address(adds[i]).approve(address(testRai), 3 ether));
+  //     PoolUser(address(adds[i]).approve(address(testWeth), 3 ether));
+  //   }
+  // }
 
   function helper_addLiquidity() public {
     uint256 wethAmount = 1 ether;
