@@ -155,7 +155,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
    * @notice Add liquidity to this uniswap pool manager
    * @param newLiquidity The amount of liquidty that the user wish to add
    */
-  function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
+  function justDeposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
     uint128 previousLiquidity = position.uniLiquidity;
@@ -177,7 +177,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
    * @notice Add liquidity to this uniswap pool manager
    * @param newLiquidity The amount of liquidty that the user wish to add
    */
-  function depositAndRabalance(uint128 newLiquidity) external returns (uint256 mintAmount) {
+  function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
     //Since we'll mint a new position, why not burn and mint according to the desired range
     //Useful to benchmark the gas increase to the end user and possibly avoid to have to call rebalance at all.
     // In case of a multi tranche scenario, rebalancing all might be too expensive, but we could consider a round-robin
@@ -213,7 +213,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
       mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
     }
     // Mint users their tokens
-    mint(msg.sender, mintAmount);
+    _mint(msg.sender, mintAmount);
   }
 
   /**
@@ -270,7 +270,13 @@ contract GebUniswapV3LiquidityManager is DSToken {
     // we need to know beforeHand which of the two is token0 and which is token1, because that affects how price is calculated
     //4.From 3,get the sqrtPriceX96
 
-    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
+    uint160 sqrtRedPriceX96;
+    if (!raiIsT0) {
+      sqrtRedPriceX96 = uint160(sqrt((redemptionPrice << 96) / ethUsdPrice));
+    } else {
+      sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice << 96) / redemptionPrice));
+    }
+
     //5. Calculate the tick that the redemption price is at
     int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
     int24 spacedTick = targetTick - (targetTick % tickSpacing);
@@ -279,11 +285,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
     // Ticks are discrete so this calculation might give us a tick that is between two valid ticks. Still not sure about the consequences
     int24 lowerTick = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
     int24 upperTick = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
-    // In case rai is not token0, there's a need to invert the range
-    if (!raiIsT0) {
-      lowerTick *= -1;
-      upperTick *= -1;
-    }
+
     return (lowerTick, upperTick);
   }
 
