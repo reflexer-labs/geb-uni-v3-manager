@@ -30,7 +30,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     super.setUp();
 
     deployIndex(bytes32("ENGLISH"));
-    // helper_addAuth();
+    helper_addAuth();
     // Deploy each token
     testRai = new TestRAI("RAI");
     testWeth = new TestWETH("WETH");
@@ -139,7 +139,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
     //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
     //But we'll add an approximation
-    manager.depositAndRabalance(3.15 ether);
+    manager.deposit(3.15 ether);
     (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
     (uint128 _li, , , , ) = pool.positions(id);
     emit log_named_uint("liq", uniLiquidity);
@@ -222,6 +222,9 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
   function test_multiple_users_adding_liquidity() public {
     // helper_addLiquidity(); //Starting with a bit of liquidity
+    (uint256 red, uint256 eht) = manager.getPrices();
+    emit log_named_uint("initiRed", red);
+    emit log_named_uint("initEth", eht);
 
     (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
 
@@ -254,10 +257,22 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     //Pool position shouldn't have changed
     assertTrue(lowerTick == lowerTick2);
     assertTrue(upperTick == upperTick2);
-    // assertTrue(false);
+
+    //Makind redemption price double
+    helper_changeRedemptionPrice(2000000000 ether);
+    (uint256 red2, uint256 eht2) = manager.getPrices();
+    emit log_named_uint("secondRed", red2);
+    emit log_named_uint("secondEth", eht2);
+    assertTrue(false);
   }
 
-  // HELPER FUNCTIONS
+  function test_sqrt_conversion() public {
+    //Using uniswap sdk to arrive at those numbers
+    (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
+
+    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
+    assertTrue(sqrtRedPriceX96 == 154170194117); //Value taken from uniswap sdk
+  }
 
   function helper_deployV3Pool(
     address _token0,
