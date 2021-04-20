@@ -32,7 +32,11 @@ contract PoolUser {
     manager.deposit(liquidityAmount);
   }
 
-  function approve(
+  function doWithdraw(uint128 liquidityAmount) public {
+    manager.withdraw(liquidityAmount);
+  }
+
+  function doApprove(
     address token,
     address who,
     uint256 amount
