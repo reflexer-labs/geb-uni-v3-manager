@@ -10,9 +10,9 @@ import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
 /**
- * @notice This contracrt is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
+ * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapV3LiquidityManager is DSToken {
+contract GebUniswapV3LiquidityManager {
   // --- Auth ---
   mapping(address => uint256) public authorizedAccounts;
 
@@ -160,7 +160,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
 
     uint128 previousLiquidity = position.uniLiquidity;
 
-    _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity);
+    _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity, abi.encodePacked(msg.sender, uint256(0), uint256(0)));
 
     //TODO double check this calculation
     uint256 __supply = _supply;
@@ -187,9 +187,12 @@ contract GebUniswapV3LiquidityManager is DSToken {
     (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
     uint128 compoundLiquidity = 0;
     //A possible optimization is only rebalance if the the tick diff is significant enough
+    uint256 collected0 = 0;
+    uint256 collected1 = 0;
     if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
       // Get the fees
-      (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+
+      (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
       //Figure how much liquity we can get from our current balances
       (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -203,7 +206,15 @@ contract GebUniswapV3LiquidityManager is DSToken {
       );
     }
 
-    _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity);
+    //Pre-pay the share that will come from this contract, the rest we take from msg.sender on callback.
+    if (collected0 > 0) {
+      TransferHelper.safeTransfer(token0, msg.sender, collected0);
+    }
+    if (collected1 > 0) {
+      TransferHelper.safeTransfer(token1, msg.sender, collected1);
+    }
+
+    _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encodePacked(msg.sender, collected0, collected1));
 
     //TODO double check this calculation
     uint256 __supply = _supply;
@@ -316,7 +327,7 @@ contract GebUniswapV3LiquidityManager is DSToken {
         );
 
       // Mint this new liquidity. _mintOnUniswap updates the position storage
-      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity);
+      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encodePacked(address(this), uint256(0), uint256(0)));
     }
   }
 
@@ -329,9 +340,10 @@ contract GebUniswapV3LiquidityManager is DSToken {
   function _mintOnUniswap(
     int24 lowerTick,
     int24 upperTick,
-    uint128 totalLiquidity
+    uint128 totalLiquidity,
+    bytes memory callbackData
   ) private {
-    (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, totalLiquidity, abi.encode(address(this)));
+    (uint256 amountDeposited0, uint256 amountDeposited1) = pool.mint(address(this), lowerTick, upperTick, totalLiquidity, callbackData);
     position.lowerTick = lowerTick;
     position.upperTick = upperTick;
 
@@ -382,21 +394,22 @@ contract GebUniswapV3LiquidityManager is DSToken {
   ) external {
     require(msg.sender == address(pool));
 
-    address sender = abi.decode(data, (address));
+    (address sender, uint256 amt0Paid, uint256 amt1Paid) = abi.decode(data, (address, uint256, uint256));
 
     if (sender == address(this)) {
-      if (amount0Owed > 0) {
-        TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
+      //Can this subtraction overflow? We probably need to lock it to not have third party calling it
+      if (amount0Owed - amt0Paid > 0) {
+        TransferHelper.safeTransfer(token0, msg.sender, amount0Owed - amt0Paid);
       }
-      if (amount1Owed > 0) {
-        TransferHelper.safeTransfer(token1, msg.sender, amount1Owed);
+      if (amount1Owed - amt1Paid > 0) {
+        TransferHelper.safeTransfer(token1, msg.sender, amount1Owed - amt1Paid);
       }
     } else {
-      if (amount0Owed > 0) {
-        TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed);
+      if (amount0Owed - amt0Paid > 0) {
+        TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0Paid);
       }
-      if (amount1Owed > 0) {
-        TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed);
+      if (amount1Owed - amt1Paid > 0) {
+        TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1Paid);
       }
     }
   }
