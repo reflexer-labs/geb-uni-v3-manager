@@ -2,7 +2,7 @@ pragma solidity ^0.6.7;
 
 import "ds-math/math.sol";
 import "../lib/geb/src/OracleRelayer.sol";
-import { DSToken } from "../lib/ds-token/src/token.sol";
+import { ERC20 } from "./erc20/ERC20.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
@@ -12,7 +12,7 @@ import { TickMath } from "./uni/libraries/TickMath.sol";
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapV3LiquidityManager {
+contract GebUniswapV3LiquidityManager is ERC20 {
   // --- Auth ---
   mapping(address => uint256) public authorizedAccounts;
 
@@ -111,7 +111,7 @@ contract GebUniswapV3LiquidityManager {
     uint256 delay_,
     address pool_,
     OracleRelayer relayer_
-  ) public DSToken(name_, symbol_) {
+  ) public ERC20(name_, symbol_) {
     require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
     require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidtyManager/invalid-delay");
     pool = IUniswapV3Pool(pool_);
@@ -163,11 +163,11 @@ contract GebUniswapV3LiquidityManager {
     _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity, abi.encodePacked(msg.sender, uint256(0), uint256(0)));
 
     //TODO double check this calculation
-    uint256 __supply = _supply;
+    uint256 __supply = _totalSupply;
     if (__supply == 0) {
       mintAmount = newLiquidity;
     } else {
-      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
+      mintAmount = uint256(newLiquidity).mul(__supply).div(previousLiquidity);
     }
     // Mint users their tokens
     _mint(msg.sender, mintAmount);
@@ -217,11 +217,11 @@ contract GebUniswapV3LiquidityManager {
     _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encodePacked(msg.sender, collected0, collected1));
 
     //TODO double check this calculation
-    uint256 __supply = _supply;
+    uint256 __supply = _totalSupply;
     if (__supply == 0) {
       mintAmount = newLiquidity;
     } else {
-      mintAmount = DSMath.mul(uint256(newLiquidity), (_supply)) / previousLiquidity;
+      mintAmount = uint256(newLiquidity).mul(__supply).div(previousLiquidity);
     }
     // Mint users their tokens
     _mint(msg.sender, mintAmount);
@@ -240,11 +240,11 @@ contract GebUniswapV3LiquidityManager {
     )
   {
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
-    uint256 __supply = _supply;
+    uint256 __supply = _totalSupply;
 
-    burn(msg.sender, liquidityAmount);
+    _burn(msg.sender, liquidityAmount);
 
-    uint256 _liquidityBurned = DSMath.mul(liquidityAmount, __supply) / position.uniLiquidity;
+    uint256 _liquidityBurned = liquidityAmount.mul(__supply).div(position.uniLiquidity);
     require(_liquidityBurned < uint256(0 - 1));
     liquidityBurned = uint128(_liquidityBurned);
 
@@ -412,12 +412,6 @@ contract GebUniswapV3LiquidityManager {
         TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1Paid);
       }
     }
-  }
-
-  function _mint(address guy, uint256 wad) internal {
-    _balances[guy] = add(_balances[guy], wad);
-    _supply = add(_supply, wad);
-    emit Mint(guy, wad);
   }
 
   /**
