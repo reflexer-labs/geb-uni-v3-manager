@@ -160,7 +160,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
     uint128 previousLiquidity = position.uniLiquidity;
 
-    _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity, abi.encodePacked(msg.sender, uint256(0), uint256(0)));
+    _mintOnUniswap(_currentLowerTick, _currentUpperTick, newLiquidity, abi.encode(msg.sender, uint256(0), uint256(0)));
 
     //TODO double check this calculation
     uint256 __supply = _totalSupply;
@@ -189,9 +189,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     //A possible optimization is only rebalance if the the tick diff is significant enough
     uint256 collected0 = 0;
     uint256 collected1 = 0;
-    if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
-      // Get the fees
-
+    if (position.uniLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
       (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
       //Figure how much liquity we can get from our current balances
@@ -206,15 +204,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
       );
     }
 
-    //Pre-pay the share that will come from this contract, the rest we take from msg.sender on callback.
-    if (collected0 > 0) {
-      TransferHelper.safeTransfer(token0, msg.sender, collected0);
-    }
-    if (collected1 > 0) {
-      TransferHelper.safeTransfer(token1, msg.sender, collected1);
-    }
-
-    _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encodePacked(msg.sender, collected0, collected1));
+    _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
 
     //TODO double check this calculation
     uint256 __supply = _totalSupply;
@@ -249,11 +239,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     liquidityBurned = uint128(_liquidityBurned);
 
     (uint256 amount0, uint256 amount1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, liquidityBurned, msg.sender);
-
-    //update position
-    // All other factors are still the same
-    (uint128 _liquidity, , , , ) = pool.positions(position.id);
-    position.uniLiquidity = _liquidity;
   }
 
   /**
@@ -304,7 +289,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
    * @notice Public function to rebalance the pool position to the correct threshold from the redemption price
    */
   function rebalance() external {
-    // require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
+    require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
     // Read all this from storage to minimize SLOADs
     (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
@@ -327,7 +312,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         );
 
       // Mint this new liquidity. _mintOnUniswap updates the position storage
-      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encodePacked(address(this), uint256(0), uint256(0)));
+      //Due to roundings, we get different amounts from LiquidityAmounts.getLiquidityForAmounts and the actual amountOwed we get in the callback
+      //We need to find a resonable workaround
+      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity - 1000 ether, abi.encode(address(this), collected0, collected1));
     }
   }
 
@@ -380,12 +367,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
     // Collect all owed
     (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, requestAmount0, requestAmount1);
+    //update position
+    // All other factors are still the same
+    (uint128 _liquidity, , , , ) = pool.positions(position.id);
+    position.uniLiquidity = _liquidity;
   }
 
   /**
    * @notice Callback used to transfer tokens to uniswap pool. Tokens need to be aproved before calling mint or deposit.
    * @param amount0Owed The amount of token0 necessary to send to pool
    * @param amount1Owed The amount of token1 necessary to send to pool
+   * @param data Arbitrary data to use in the function
    */
   function uniswapV3MintCallback(
     uint256 amount0Owed,
@@ -394,24 +386,29 @@ contract GebUniswapV3LiquidityManager is ERC20 {
   ) external {
     require(msg.sender == address(pool));
 
-    (address sender, uint256 amt0Paid, uint256 amt1Paid) = abi.decode(data, (address, uint256, uint256));
-
-    if (sender == address(this)) {
-      //Can this subtraction overflow? We probably need to lock it to not have third party calling it
-      if (amount0Owed - amt0Paid > 0) {
-        TransferHelper.safeTransfer(token0, msg.sender, amount0Owed - amt0Paid);
-      }
-      if (amount1Owed - amt1Paid > 0) {
-        TransferHelper.safeTransfer(token1, msg.sender, amount1Owed - amt1Paid);
-      }
-    } else {
-      if (amount0Owed - amt0Paid > 0) {
-        TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0Paid);
-      }
-      if (amount1Owed - amt1Paid > 0) {
-        TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1Paid);
+    (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
+    //Pay what this contract owns
+    if (amt0FromThis > 0) {
+      if (sender == address(this)) {
+        TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
+      } else {
+        TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
       }
     }
+    if (amt1FromThis > 0) {
+      if (sender == address(this)) {
+        TransferHelper.safeTransfer(token0, msg.sender, amount1Owed);
+      } else {
+        TransferHelper.safeTransfer(token0, msg.sender, amt1FromThis);
+      }
+    }
+    // //Pay what sender owns
+    // if (amount0Owed > amt0FromThis) {
+    //   TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
+    // }
+    // if (amount1Owed > amt1FromThis) {
+    //   TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
+    // }
   }
 
   /**

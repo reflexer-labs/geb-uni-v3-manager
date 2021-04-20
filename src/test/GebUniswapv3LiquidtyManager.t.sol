@@ -38,7 +38,6 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
     // Deploy Pool
     pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
-    emit log_named_address("pol", address(pool));
 
     //We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
     //This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
@@ -49,11 +48,11 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     u2 = new PoolUser(manager);
     u3 = new PoolUser(manager);
 
-    // address[] memory adds = new address[](3);
-    // adds[0] = address(u1);
-    // adds[1] = address(u2);
-    // adds[2] = address(u3);
-    // helper_transferAndApprove(adds);
+    address[] memory adds = new address[](3);
+    adds[0] = address(u1);
+    adds[1] = address(u2);
+    adds[2] = address(u3);
+    helper_transferToAdds(adds);
   }
 
   function test_sanity_uint_variables() public {
@@ -92,179 +91,140 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
   function test_adding_liquidity() public {
     uint256 wethAmount = 1 ether;
     uint256 raiAmount = 10 ether;
-    //Before making deposit, we need to send tokens to the pool
-    //Those values are roughly the amount needed for 1e18 of liquidity
-    testRai.transfer(address(manager), raiAmount);
-    testWeth.transfer(address(manager), wethAmount);
-    address p = address(manager.pool());
-    emit log_named_address("pool", p);
 
-    //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
-    //But we'll add an approximation
-    manager.deposit(3.15 ether);
-    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
-    (uint128 _li, , , , ) = pool.positions(id);
-    emit log_named_uint("liq", uniLiquidity);
-    emit log_named_uint("_li", _li);
+    u1.doApprove(address(testRai), address(manager), raiAmount);
+    u1.doApprove(address(testWeth), address(manager), wethAmount);
 
-    uint256 liquidityReceived = manager.totalSupply();
-    assertTrue(liquidityReceived == 3.15 ether);
+    (uint160 currPrice, , , , , , ) = pool.slot0();
+    (int24 newLower, int24 newUpper) = manager.getNextTicks();
 
-    uint256 liqReceived = manager.balanceOf(address(this));
-    assertTrue(liqReceived == 3.15 ether);
+    uint128 liq = helper_getLiquidityAmountsForTicks(currPrice, newLower, newUpper, 10 ether, 1 ether);
+    emit log_named_uint("liq", liq);
 
-    uint256 bal0 = testRai.balanceOf(address(pool));
-    uint256 bal1 = testWeth.balanceOf(address(pool));
-    //there's some leftover coins in the manager contract, so rounding here is needed
-    assertTrue(bal0 / raiAmount == 0);
-    assertTrue(bal1 / wethAmount == 0);
+    {
+      (int24 _nlower, int24 _nupper) = manager.getNextTicks();
 
-    bytes32 positionID = keccak256(abi.encodePacked(address(manager), int24(-887270), int24(887270)));
-    (uint128 _liquidity, , , , ) = pool.positions(positionID);
-    // emit log_named_uint("liq", _liquidity);
-    // emit log_named_uint("bal0", bal0 / raiAmount);
-    // emit log_named_uint("bal1", bal1 / wethAmount);
-    //assertTrue(false);
-  }
+      (uint160 currPrice, , , , , , ) = pool.slot0();
+      (, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(currPrice, TickMath.getSqrtRatioAtTick(_nlower), TickMath.getSqrtRatioAtTick(_nupper), liq);
 
-  function test_deposit_and_Rebalancing() public {
-    uint256 wethAmount = 1 ether;
-    uint256 raiAmount = 10 ether;
-    //Before making deposit, we need to send tokens to the pool
-    //Those values are roughly the amount needed for 1e18 of liquidity
-    testRai.transfer(address(manager), raiAmount);
-    testWeth.transfer(address(manager), wethAmount);
-    address p = address(manager.pool());
-    emit log_named_address("pool", p);
+      uint256 balBefore = testWeth.balanceOf(address(u1));
 
-    //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
-    //But we'll add an approximation
-    manager.deposit(3.15 ether);
-    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
-    (uint128 _li, , , , ) = pool.positions(id);
-    emit log_named_uint("liq", uniLiquidity);
-    emit log_named_uint("_li", _li);
+      u1.doDeposit(liq);
+
+      uint256 balAfter = testWeth.balanceOf(address(u1));
+      emit log_named_uint("initEth", (balBefore - balAfter) / amount1);
+      assertTrue((balBefore - balAfter) / amount1 == 1);
+    }
+
+    (bytes32 id, , , uint128 uniLiquidity) = manager.position();
+    (uint128 _liquidity, , , , ) = pool.positions(id);
+    assertTrue(uniLiquidity == _liquidity);
 
     uint256 liquidityReceived = manager.totalSupply();
-    assertTrue(liquidityReceived == 3.15 ether);
+    assertTrue(liquidityReceived == liq);
 
-    uint256 liqReceived = manager.balanceOf(address(this));
-    assertTrue(liqReceived == 3.15 ether);
-
-    uint256 bal0 = testRai.balanceOf(address(pool));
-    uint256 bal1 = testWeth.balanceOf(address(pool));
-    //there's some leftover coins in the manager contract, so rounding here is needed
-    assertTrue(bal0 / raiAmount == 0);
-    assertTrue(bal1 / wethAmount == 0);
-
-    // bytes32 positionID = keccak256(abi.encodePacked(address(manager), int24(-887270), int24(887270)));
-    // (uint128 _liquidity, , , , ) = pool.positions(positionID);
-    // emit log_named_uint("liq", _liquidity);
-    // emit log_named_uint("bal0", bal0 / raiAmount);
-    // emit log_named_uint("bal1", bal1 / wethAmount);
-    //assertTrue(false);
+    uint256 liqReceived = manager.balanceOf(address(u1));
+    assertTrue(liqReceived == liq);
   }
 
   function test_rebalancing_pool() public {
     helper_addLiquidity(); //Starting with a bit of liquidity
-    uint256 redemptionPrice = oracleRelayer.redemptionPrice();
-    (OracleLike oracle, , ) = oracleRelayer.collateralTypes(bytes32("ETH"));
-    (uint256 ethUsd, bool valid) = oracle.getResultWithValidity();
-    assertTrue(valid);
+    (uint256 red, ) = manager.getPrices();
 
-    uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsd * 2**96) / redemptionPrice));
-    int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtRedPriceX96);
-    int24 spacedTick = targetTick - (targetTick % 10);
+    (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity) = manager.position();
+    emit log_named_uint("red", red);
+    hevm.warp(2 days); //Advance to the future
+
+    helper_changeRedemptionPrice(500000000 ether); //Making RAI twice more expensive
+
+    (int24 newLower, int24 newUpper) = manager.getNextTicks();
+
+    // The lower bound might still be the same, since is current the MIN_TICK
+    assertTrue(init_upperTick != newUpper);
 
     manager.rebalance();
+    // emit log_named_uint("am0", collected0);
+    // emit log_named_uint("am1", collected1);
 
-    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
+    (uint128 _liquidity, , , , ) = pool.positions(init_id);
+    assertTrue(_liquidity == 0); //We should have burned the whole old position
 
-    uint256 bal0 = testRai.balanceOf(address(pool));
-    uint256 bal1 = testWeth.balanceOf(address(pool));
-    uint256 bal2 = testRai.balanceOf(address(manager));
-    uint256 bal3 = testWeth.balanceOf(address(manager));
-    //Sums of tokens are consistent
-    assert(bal2 + bal0 == 10 ether);
-    assert(bal3 + bal1 == 1 ether);
+    (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
 
-    (uint160 currPrice, , , , , , ) = pool.slot0();
-    uint256 liq =
-      LiquidityAmounts.getLiquidityForAmounts(currPrice, TickMath.getSqrtRatioAtTick(lowerTick), TickMath.getSqrtRatioAtTick(upperTick), bal0, bal1);
-    assertTrue(uniLiquidity / liq == 0);
+    assertTrue(end_uniLiquidity <= init_uniLiquidity);
+    assertTrue(false);
   }
 
   function test_burining_liquidity() public {
     uint256 wethAmount = 1 ether;
     uint256 raiAmount = 10 ether;
     helper_addLiquidity(); //Starting with a bit of liquidity
-    uint256 balanceBefore = testRai.balanceOf(address(this));
 
-    uint256 liq = manager.balanceOf(address(this));
-    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity) = manager.position();
-    (uint128 _li, , , , ) = pool.positions(id);
-    emit log_named_uint("liq", uniLiquidity);
+    uint256 liq = manager.balanceOf(address(u1));
+    (bytes32 inti_id, , , uint128 inti_uniLiquidity) = manager.position();
+    (uint128 _li, , , , ) = pool.positions(inti_id);
+
+    assertTrue(liq == _li);
+    emit log_named_uint("liq", inti_uniLiquidity);
     emit log_named_uint("_li", _li);
 
     //withdraw half of liquidity
-    manager.withdraw(liq / 2);
-    assertTrue(manager.balanceOf(address(this)) == liq / 2);
+    u1.doWithdraw(uint128(liq / 2));
+    assertTrue(manager.balanceOf(address(u1)) == liq / 2);
 
-    (uint128 _li2, , , , ) = pool.positions(id);
+    (uint128 _li2, , , , ) = pool.positions(inti_id);
     emit log_named_uint("_li2", _li2);
+    assertTrue(_li2 == _li / 2);
 
-    uint256 balanceAfter = testRai.balanceOf(address(this));
-    emit log_named_uint("bal", balanceAfter - balanceBefore);
-    emit log_named_uint("bal3", raiAmount / 2);
-    assertTrue((balanceAfter - balanceBefore) / raiAmount / 2 == 0);
-    //assertTrue(false);
+    (bytes32 end_id, , , uint128 end_uniLiquidity) = manager.position();
+    assertTrue(end_uniLiquidity == inti_uniLiquidity / 2);
   }
 
-  function test_multiple_users_adding_liquidity() public {
-    // helper_addLiquidity(); //Starting with a bit of liquidity
-    (uint256 red, uint256 eht) = manager.getPrices();
-    emit log_named_uint("initiRed", red);
-    emit log_named_uint("initEth", eht);
+  // function test_multiple_users_adding_liquidity() public {
+  //   // helper_addLiquidity(); //Starting with a bit of liquidity
+  //   (uint256 red, uint256 eht) = manager.getPrices();
+  //   emit log_named_uint("initiRed", red);
+  //   emit log_named_uint("initEth", eht);
 
-    (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
+  //   (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
 
-    //Should make market price increase
-    uint256 u1_raiAmount = 5 ether;
-    uint256 u1_wethAmount = 2 ether;
-    //Before making deposit, we need to send tokens to the pool
-    //Those values are roughly the amount needed for 1e18 of liquidity
-    testWeth.transfer(address(manager), u1_raiAmount);
-    testRai.transfer(address(manager), u1_wethAmount);
+  //   //Should make market price increase
+  //   uint256 u1_raiAmount = 5 ether;
+  //   uint256 u1_wethAmount = 2 ether;
+  //   //Before making deposit, we need to send tokens to the pool
+  //   //Those values are roughly the amount needed for 1e18 of liquidity
+  //   testWeth.transfer(address(manager), u1_raiAmount);
+  //   testRai.transfer(address(manager), u1_wethAmount);
 
-    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
+  //   (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
 
-    uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, 5 ether, 1 ether);
+  //   uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, 5 ether, 1 ether);
 
-    uint128 max = pool.maxLiquidityPerTick();
-    emit log_named_uint("max", max);
-    emit log_named_uint("u1", u1_liquidity);
-    emit log_named_uint("uni", uniLiquidity1);
+  //   uint128 max = pool.maxLiquidityPerTick();
+  //   emit log_named_uint("max", max);
+  //   emit log_named_uint("u1", u1_liquidity);
+  //   emit log_named_uint("uni", uniLiquidity1);
 
-    u1.doDeposit(u1_liquidity);
+  //   u1.doDeposit(u1_liquidity);
 
-    // totalSupply should be equal both liquidities
-    assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
+  //   // totalSupply should be equal both liquidities
+  //   assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
-    //Getting new pool information
-    (bytes32 _, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
-    assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
+  //   //Getting new pool information
+  //   (bytes32 _, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
+  //   assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
 
-    //Pool position shouldn't have changed
-    assertTrue(lowerTick == lowerTick2);
-    assertTrue(upperTick == upperTick2);
+  //   //Pool position shouldn't have changed
+  //   assertTrue(lowerTick == lowerTick2);
+  //   assertTrue(upperTick == upperTick2);
 
-    //Makind redemption price double
-    helper_changeRedemptionPrice(2000000000 ether);
-    (uint256 red2, uint256 eht2) = manager.getPrices();
-    emit log_named_uint("secondRed", red2);
-    emit log_named_uint("secondEth", eht2);
-    assertTrue(false);
-  }
+  //   //Makind redemption price double
+  //   helper_changeRedemptionPrice(2000000000 ether);
+  //   (uint256 red2, uint256 eht2) = manager.getPrices();
+  //   emit log_named_uint("secondRed", red2);
+  //   emit log_named_uint("secondEth", eht2);
+  //   assertTrue(false);
+  // }
 
   function test_sqrt_conversion() public {
     //Using uniswap sdk to arrive at those numbers
@@ -300,27 +260,23 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     oracleRelayer.modifyParameters("redemptionPrice", newPrice);
   }
 
-  // function helper_transferAndApprove(address[] memory adds) public {
-  //   for (uint256 i = 0; i < adds.length; i++) {
-  //     testWeth.transfer(adds[i], 3 ether);
-  //     testRai.transfer(adds[i], 3 ether);
-
-  //     PoolUser(address(adds[i]).approve(address(testRai), 3 ether));
-  //     PoolUser(address(adds[i]).approve(address(testWeth), 3 ether));
-  //   }
-  // }
+  function helper_transferToAdds(address[] memory adds) public {
+    for (uint256 i = 0; i < adds.length; i++) {
+      testWeth.transfer(adds[i], 100 ether);
+      testRai.transfer(adds[i], 100 ether);
+    }
+  }
 
   function helper_addLiquidity() public {
     uint256 wethAmount = 1 ether;
     uint256 raiAmount = 10 ether;
-    //Before making deposit, we need to send tokens to the pool
-    //Those values are roughly the amount needed for 1e18 of liquidity
-    testRai.transfer(address(manager), raiAmount);
-    testWeth.transfer(address(manager), wethAmount);
+
+    u1.doApprove(address(testRai), address(manager), raiAmount);
+    u1.doApprove(address(testWeth), address(manager), wethAmount);
 
     //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
     //But we'll add an approximation
-    manager.deposit(3.15 ether);
+    u1.doDeposit(7143482264979044174729352);
   }
 
   function helper_getLiquidityAmountsForTicks(
