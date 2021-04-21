@@ -271,13 +271,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     /**
      * @notice Add liquidity to this uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
-     * @param 
+     * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
      *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
     function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        // Loading to stack to save on sloads
+        // Loading to stack to save on SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
 
@@ -287,7 +287,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected0 = 0;
         uint256 collected1 = 0;
 
-        //A possible optimization is to only rebalance if the tick diff is significant enough
+        // A possible optimization is to only rebalance if the tick diff is significant enough
         if (position.uniLiquidity > 0 && (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
@@ -319,12 +319,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         _mint(recipient, mintAmount);
 
-        Deposit(msg.sender, recipient, newLiquidity);
+        emit Deposit(msg.sender, recipient, newLiquidity);
     }
 
     /**
      * @notice Remove liquidity and withdraw the underlying assets
      * @param liquidityAmount The amount of liquidity to withdraw
+     * @param recipient The address that will receive token0 and token1 tokens
+     * @param amount0Requested Minimum amount of token0 requested
+     * @param amount1Requested Minimum amount of token1 requested
+     * @return amount0Requested The amount of token0 requested from the pool
+     * @return amount1Requested The amount of token1 requested from the pool
      */
     function withdraw(
         uint256 liquidityAmount,
@@ -344,7 +349,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Public function to rebalance the pool position to the correct threshold from the redemption price
+     * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
     function rebalance() external {
         require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
@@ -372,16 +377,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
             _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
         }
-        //Even if there's no change, we update the time anyway
+        
+        // Even if there's no change, we still update the time
         lastRebalance = block.timestamp;
         emit Rebalance(msg.sender, block.timestamp);
     }
 
     // --- Uniswap Related Functions ---
     /**
-     * @notice Helper function to mint a new position on uniswap pool
-     * @param lowerTick The lower bound of the range to deposit the liquidity
-     * @param upperTick The upper bound of the range to deposit the liquidity
+     * @notice Helper function to mint a position
+     * @param lowerTick The lower bound of the range to deposit the liquidity to
+     * @param upperTick The upper bound of the range to deposit the liquidity to
      * @param totalLiquidity The total amount of liquidity to mint
      */
     function _mintOnUniswap(
@@ -401,11 +407,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Helper function to mint a new position on uniswap pool
-     * @param lowerTick The lower bound of the range to deposit the liquidity
-     * @param upperTick The upper bound of the range to deposit the liquidity
+     * @notice Helper function to burn a position
+     * @param lowerTick The lower bound of the range to deposit the liquidity to
+     * @param upperTick The upper bound of the range to deposit the liquidity to
      * @param burnedLiquidity The amount of liquidity to burn
-     * @param recipient The address to receive the collected amounts
+     * @param recipient The address to send the tokens to
+     * @return amount0Requested The amount of token0 requested from the pool
+     * @return amount1Requested The amount of token1 requested from the pool
      */
     function _burnOnUniswap(
         int24 lowerTick,
@@ -427,7 +435,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Callback used to transfer tokens to uniswap pool. Tokens need to be aproved before calling mint or deposit.
+     * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
      * @param amount1Owed The amount of token1 necessary to send to pool
      * @param data Arbitrary data to use in the function
@@ -440,7 +448,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(msg.sender == address(pool));
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
-        //Pay what this contract owns
+        
+        // Pay what this contract owes
         if (amt0FromThis > 0) {
             if (sender == address(this)) {
                 TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
@@ -455,7 +464,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
             }
         }
-        //Pay what sender owns
+        
+        // Pay what the sender owes
         if (amount0Owed > amt0FromThis) {
             TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
         }
