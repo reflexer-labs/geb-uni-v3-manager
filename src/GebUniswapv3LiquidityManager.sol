@@ -14,49 +14,49 @@ import { TickMath } from "./uni/libraries/TickMath.sol";
  */
 contract GebUniswapV3LiquidityManager is ERC20 {
     // --- Pool Variables ---
-    //The address of pool's token0
+    // The address of pool's token0
     address public token0;
-    //The address of pool's token1
+    // The address of pool's token1
     address public token1;
-    //The pool's fee
+    // The pool's fee
     uint24 public fee;
-    //The pool's tickSpacing
+    // The pool's tickSpacing
     int24 public tickSpacing;
-    //The pool's maximum liquisity per tick
+    // The pool's maximum liquisity per tick
     uint128 public maxLiquidityPerTick;
-    // Flag to identify weather protocol is t0 or t1. Needed for correct tick calculation
+    // Flag to identify whether the system coin is token0 or token1. Needed for correct tick calculation
     bool protocolTokenIsT0;
 
     // --- Variables ---
-    //The threshold bounded by MIN_THRESHOLD(1000) and MIN_THRESHOLD(10000000), meaning that 1000 = 0.1% and 10000000 = 100%.
+    // The threshold bounded by MIN_THRESHOLD(1000) and MIN_THRESHOLD(10000000), meaning that 1000 = 0.1% and 10000000 = 100%.
     uint256 public threshold;
-    //The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
+    // The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
     uint256 public delay;
-    //The timestamp of the last rebalance
+    // The timestamp of the last rebalance
     uint256 public lastRebalance;
-    // Collateral to read prices from oracleRelayer
+    // Collateral whose price to read from the oracle relayer
     bytes32 public collateralType;
-    //This constract position on uniswap v3 pool
+    // This contracts' position in the Uniswap V3 pool
     Position public position;
 
     // --- External Contracts ---
-    // Address of uniswap v3 pool
+    // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
-    // Address of oracleRelayer to get prices from
+    // Address of oracle relayer to get prices from
     OracleRelayer public oracleRelayer;
 
     // --- Constants ---
-    //Used to get the max amount of tokens per liquidity burned
+    // Used to get the max amount of tokens per liquidity burned
     uint128 constant MAX_UINT128 = uint128(0 - 1);
-    //100% - Not really achievable, because it'll reach max and min ticks
+    // 100% - Not really achievable, because it'll reach max and min ticks
     uint256 constant MAX_THRESHOLD = 10000000;
-    // 1% - Quite dangerous because the market price can easily outsing the threshold
+    // 1% - Quite dangerous because the market price can easily move beyond the threshold
     uint256 constant MIN_THRESHOLD = 10000; // 1%
-    // A week is the maximum time without a rebalance
+    // A week is the maximum time allowed without a rebalance
     uint256 constant MAX_DELAY = 7 days;
-    // 1 hour is the absolute minimum delay for rebalance. But could be less through deposits
+    // 1 hour is the absolute minimum delay for a rebalance. Could be less through deposits
     uint256 constant MIN_DELAY = 60 minutes;
-    // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0) are required
+    // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
     int24 public constant MAX_TICK = 887270;
     int24 public constant MIN_TICK = -887270;
 
@@ -103,19 +103,19 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      **/
 
     modifier isAuthorized() {
-        require(authorizedAccounts[msg.sender] == 1, "OracleRelayer/account-not-authorized");
+        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
         _;
     }
 
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
-     * @param symbol_ The symbik of the ERC20 this contract will distribute
-     * @param protocolTokenAddress_ The address of deployed RAI token
-     * @param threshold_ The threshold to set liquidity from the redemption price
-     * @param delay_ The minimum required time before rebalance can be called
-     * @param pool_ Address of the already deployed univ3 pool this contract will manage
-     * @param relayer_ Address of the already deployed the relayer to get prices from
+     * @param symbol_ The symbol of the ERC20 this contract will distribute
+     * @param protocolTokenAddress_ The address of the system coin
+     * @param threshold_ The liquidity threshold around the redemption price
+     * @param delay_ The minimum required time before rebalance() can be called
+     * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
+     * @param relayer_ Address of the already deployed oracle relayer to get prices from
      */
     constructor(
         string memory name_,
@@ -130,24 +130,24 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
-        //Getting Pool Information
+        // Getting pool information
         pool = IUniswapV3Pool(pool_);
 
-        // We might want to save gas and takes this values straight from the constructor, trusting that they are correct
+        // We might want to save gas so this takes values straight from the pool, trusting that they are correct
         token0 = pool.token0();
         token1 = pool.token1();
         fee = pool.fee();
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        // Setting needed variables
+        // Setting variables
         threshold = threshold_;
         delay = delay_;
         protocolTokenIsT0 = token0 == protocolTokenAddress_ ? true : false;
         collateralType = collateralType_;
         oracleRelayer = relayer_;
 
-        //Starting position
+        // Starting position
         (int24 _lower, int24 _upper) = getNextTicks();
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
