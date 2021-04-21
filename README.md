@@ -28,7 +28,7 @@ Imagine this scenario with 3 tranches:
 
 -   Tranche 1: 10% of treasury, with a threshold of 5%
 -   Tranche 2: 40% of treasury, with a threshold of 15%
--   Tranche 3: 50% of treasury, with a threshold of 35%;
+-   Tranche 3: 50% of treasury, with a threshold of 35%
 
 The specifics number can be optimized for each pool, according to it's volatility or other factores.
 
