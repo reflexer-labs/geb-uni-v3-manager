@@ -14,49 +14,49 @@ import { TickMath } from "./uni/libraries/TickMath.sol";
  */
 contract GebUniswapV3LiquidityManager is ERC20 {
     // --- Pool Variables ---
-    //The address of pool's token0
+    // The address of pool's token0
     address public token0;
-    //The address of pool's token1
+    // The address of pool's token1
     address public token1;
-    //The pool's fee
+    // The pool's fee
     uint24 public fee;
-    //The pool's tickSpacing
+    // The pool's tickSpacing
     int24 public tickSpacing;
-    //The pool's maximum liquisity per tick
+    // The pool's maximum liquisity per tick
     uint128 public maxLiquidityPerTick;
-    // Flag to identify weather protocol is t0 or t1. Needed for correct tick calculation
-    bool protocolTokenIsT0;
+    // Flag to identify whether the system coin is token0 or token1. Needed for correct tick calculation
+    bool systemCoinIsT0;
 
     // --- Variables ---
-    //The threshold bounded by MIN_THRESHOLD(1000) and MIN_THRESHOLD(10000000), meaning that 1000 = 0.1% and 10000000 = 100%.
+    // The threshold bounded by MIN_THRESHOLD(1000) and MIN_THRESHOLD(10000000), meaning that 1000 = 0.1% and 10000000 = 100%.
     uint256 public threshold;
-    //The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
+    // The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
     uint256 public delay;
-    //The timestamp of the last rebalance
+    // The timestamp of the last rebalance
     uint256 public lastRebalance;
-    // Collateral to read prices from oracleRelayer
+    // Collateral whose price to read from the oracle relayer
     bytes32 public collateralType;
-    //This constract position on uniswap v3 pool
+    // This contracts' position in the Uniswap V3 pool
     Position public position;
 
     // --- External Contracts ---
-    // Address of uniswap v3 pool
+    // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
-    // Address of oracleRelayer to get prices from
+    // Address of oracle relayer to get prices from
     OracleRelayer public oracleRelayer;
 
     // --- Constants ---
-    //Used to get the max amount of tokens per liquidity burned
+    // Used to get the max amount of tokens per liquidity burned
     uint128 constant MAX_UINT128 = uint128(0 - 1);
-    //100% - Not really achievable, because it'll reach max and min ticks
+    // 100% - Not really achievable, because it'll reach max and min ticks
     uint256 constant MAX_THRESHOLD = 10000000;
-    // 1% - Quite dangerous because the market price can easily outsing the threshold
+    // 1% - Quite dangerous because the market price can easily move beyond the threshold
     uint256 constant MIN_THRESHOLD = 10000; // 1%
-    // A week is the maximum time without a rebalance
+    // A week is the maximum time allowed without a rebalance
     uint256 constant MAX_DELAY = 7 days;
-    // 1 hour is the absolute minimum delay for rebalance. But could be less through deposits
+    // 1 hour is the absolute minimum delay for a rebalance. Could be less through deposits
     uint256 constant MIN_DELAY = 60 minutes;
-    // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0) are required
+    // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
     int24 public constant MAX_TICK = 887270;
     int24 public constant MIN_TICK = -887270;
 
@@ -103,24 +103,24 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      **/
 
     modifier isAuthorized() {
-        require(authorizedAccounts[msg.sender] == 1, "OracleRelayer/account-not-authorized");
+        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
         _;
     }
 
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
-     * @param symbol_ The symbik of the ERC20 this contract will distribute
-     * @param protocolTokenAddress_ The address of deployed RAI token
-     * @param threshold_ The threshold to set liquidity from the redemption price
-     * @param delay_ The minimum required time before rebalance can be called
-     * @param pool_ Address of the already deployed univ3 pool this contract will manage
-     * @param relayer_ Address of the already deployed the relayer to get prices from
+     * @param symbol_ The symbol of the ERC20 this contract will distribute
+     * @param systemCoinAddress_ The address of the system coin
+     * @param threshold_ The liquidity threshold around the redemption price
+     * @param delay_ The minimum required time before rebalance() can be called
+     * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
+     * @param relayer_ Address of the already deployed oracle relayer
      */
     constructor(
         string memory name_,
         string memory symbol_,
-        address protocolTokenAddress_,
+        address systemCoinAddress_,
         uint256 threshold_,
         uint256 delay_,
         address pool_,
@@ -130,31 +130,31 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
-        //Getting Pool Information
+        // Getting pool information
         pool = IUniswapV3Pool(pool_);
 
-        // We might want to save gas and takes this values straight from the constructor, trusting that they are correct
+        // We might want to save gas so this takes values straight from the pool, trusting that they are correct
         token0 = pool.token0();
         token1 = pool.token1();
         fee = pool.fee();
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        // Setting needed variables
+        // Setting variables
         threshold = threshold_;
         delay = delay_;
-        protocolTokenIsT0 = token0 == protocolTokenAddress_ ? true : false;
+        systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         collateralType = collateralType_;
         oracleRelayer = relayer_;
 
-        //Starting position
+        // Starting position
         (int24 _lower, int24 _upper) = getNextTicks();
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
 
     // --- Math ---
     /**
-     * @notice Calculates the sqrt of number
+     * @notice Calculates the sqrt of a number
      * @param y The number to calculate the square root of
      * @return z The result of the calculation
      */
@@ -174,8 +174,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     // --- Administration ---
     /**
      * @notice Modify the adjustable parameters
-     * @param parameter The variable to changes
-     * @param data The value to set parameter as
+     * @param parameter The variable to change
+     * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
@@ -190,9 +190,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Modify the adjustable parameters
-     * @param parameter The variable to changes
-     * @param data The value to set parameter as
+     * @notice Modify adjustable parameters
+     * @param parameter The variable to change
+     * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracleRelayer") {
@@ -203,16 +203,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
     // --- Getters ---
     /**
-     * @notice Public function to get both the redemption and ETH/USD price
-     * @return redemptionPrice The redemption prince in usd
-     * @return ethUsdPrice The eth/usd price
+     * @notice Public function to get both the redemption price for the system coin and the other token's price
+     * @return redemptionPrice The redemption price
+     * @return ethUsdPrice The other token's price
      */
-    function getPrices() public returns (uint256 redemptionPrice, uint256 ethUsdPrice) {
+    function getPrices() public returns (uint256 redemptionPrice, uint256 tokenPrice) {
         redemptionPrice = oracleRelayer.redemptionPrice();
         (OracleLike osm, , ) = oracleRelayer.collateralTypes(collateralType);
+
         bool valid;
-        (ethUsdPrice, valid) = osm.getResultWithValidity();
-        require(valid, "GebUniswapv3LiquidityManager/invalid-price-feed");
+        (tokenPrice, valid) = osm.getResultWithValidity();
+        require(valid, "GebUniswapv3LiquidityManager/invalid-price");
     }
 
     /**
@@ -221,31 +222,31 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return _nextUpper The upper bound of the range
      */
     function getNextTicks() public returns (int24 _nextLower, int24 _nextUpper) {
-        //1. Get prices from oracleRelayer
+        // 1. Get prices from the oracle relayer
         (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
 
-        //2. Calculate the price ratio
+        // 2. Calculate the price ratio
         uint160 sqrtPriceX96;
-        if (!protocolTokenIsT0) {
+        if (!systemCoinIsT0) {
             sqrtPriceX96 = uint160(sqrt((redemptionPrice << 96) / ethUsdPrice));
         } else {
             sqrtPriceX96 = uint160(sqrt((ethUsdPrice << 96) / redemptionPrice));
         }
 
-        //3. Calculate the tick that the ratio is at
+        // 3. Calculate the tick that the ratio is at
         int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
-        //4. Adjust to comply to tickSpacing
+        // 4. Adjust to comply to tickSpacing
         int24 spacedTick = targetTick - (targetTick % tickSpacing);
 
-        //5. Find lower and upper bounds of next position
+        // 5. Find lower and upper bounds for the next position
         _nextLower = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
         _nextUpper = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
     }
 
     /**
-     * @notice Returns the current amount of token 0 for given liquidity
-     * @param liquidity The amount of liquidity
+     * @notice Returns the current amount of token0 for a given liquidity amount
+     * @param liquidity The amount of liquidity to withdraw
      */
     function getToken0FromLiquidity(uint128 liquidity) public view returns (uint256 amount0) {
         amount0 = LiquidityAmounts.getAmount0ForLiquidity(
@@ -256,8 +257,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Returns the current amount of token 0 for given liquidity
-     * @param liquidity The amount of liquidity
+     * @notice Returns the current amount of token1 for a given liquidity amount
+     * @param liquidity The amount of liquidity to withdraw
      */
     function getToken1FromLiquidity(uint128 liquidity) public view returns (uint256 amount1) {
         amount1 = LiquidityAmounts.getAmount1ForLiquidity(
@@ -269,13 +270,14 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
     /**
      * @notice Add liquidity to this uniswap pool manager
-     * @param newLiquidity The amount of liquidty that the user wish to add
+     * @param newLiquidity The amount of liquidty that the user wishes to add
+     * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
-     * A round robind could be done where in each deposit only one of the pool's position is rebalanced
+     *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
     function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        // Loading to stack to save on sloads
+        // Loading to stack to save on SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
 
@@ -285,12 +287,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected0 = 0;
         uint256 collected1 = 0;
 
-        //A possible optimization is only rebalance if the the tick diff is significant enough
+        // A possible optimization is to only rebalance if the tick diff is significant enough
         if (position.uniLiquidity > 0 && (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
-            //1.Burn and collect all that we have
+            // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
-            //2.Figure how much liquity we can get from our current balances
+            // 2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
             compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -303,11 +305,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             emit Rebalance(msg.sender, block.timestamp);
         }
 
-        // 3.Mint our new position on uniswap
+        // 3.Mint our new position on Uniswap
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
 
-        // 4.Calculate and mint user's erc20 liquidity tokens
+        // 4.Calculate and mint a user's ERC20 liquidity tokens
         uint256 __supply = _totalSupply;
         if (__supply == 0) {
             mintAmount = newLiquidity;
@@ -317,12 +319,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         _mint(recipient, mintAmount);
 
-        Deposit(msg.sender, recipient, newLiquidity);
+        emit Deposit(msg.sender, recipient, newLiquidity);
     }
 
     /**
-     * @notice Remove liquidity and withdraw the underlying assests
+     * @notice Remove liquidity and withdraw the underlying assets
      * @param liquidityAmount The amount of liquidity to withdraw
+     * @param recipient The address that will receive token0 and token1 tokens
+     * @param amount0Requested Minimum amount of token0 requested
+     * @param amount1Requested Minimum amount of token1 requested
+     * @return amount0Requested The amount of token0 requested from the pool
+     * @return amount1Requested The amount of token1 requested from the pool
      */
     function withdraw(
         uint256 liquidityAmount,
@@ -342,7 +349,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Public function to rebalance the pool position to the correct threshold from the redemption price
+     * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
     function rebalance() external {
         require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
@@ -370,16 +377,17 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
             _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
         }
-        //Even if there's no change, we update the time anyway
+
+        // Even if there's no change, we still update the time
         lastRebalance = block.timestamp;
         emit Rebalance(msg.sender, block.timestamp);
     }
 
     // --- Uniswap Related Functions ---
     /**
-     * @notice Helper function to mint a new position on uniswap pool
-     * @param lowerTick The lower bound of the range to deposit the liquidity
-     * @param upperTick The upper bound of the range to deposit the liquidity
+     * @notice Helper function to mint a position
+     * @param lowerTick The lower bound of the range to deposit the liquidity to
+     * @param upperTick The upper bound of the range to deposit the liquidity to
      * @param totalLiquidity The total amount of liquidity to mint
      */
     function _mintOnUniswap(
@@ -399,11 +407,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Helper function to mint a new position on uniswap pool
-     * @param lowerTick The lower bound of the range to deposit the liquidity
-     * @param upperTick The upper bound of the range to deposit the liquidity
+     * @notice Helper function to burn a position
+     * @param lowerTick The lower bound of the range to deposit the liquidity to
+     * @param upperTick The upper bound of the range to deposit the liquidity to
      * @param burnedLiquidity The amount of liquidity to burn
-     * @param recipient The address to receive the collected amounts
+     * @param recipient The address to send the tokens to
+     * @return amount0Requested The amount of token0 requested from the pool
+     * @return amount1Requested The amount of token1 requested from the pool
      */
     function _burnOnUniswap(
         int24 lowerTick,
@@ -425,7 +435,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
 
     /**
-     * @notice Callback used to transfer tokens to uniswap pool. Tokens need to be aproved before calling mint or deposit.
+     * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
      * @param amount1Owed The amount of token1 necessary to send to pool
      * @param data Arbitrary data to use in the function
@@ -438,7 +448,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(msg.sender == address(pool));
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
-        //Pay what this contract owns
+
+        // Pay what this contract owes
         if (amt0FromThis > 0) {
             if (sender == address(this)) {
                 TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
@@ -453,7 +464,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
             }
         }
-        //Pay what sender owns
+
+        // Pay what the sender owes
         if (amount0Owed > amt0FromThis) {
             TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
         }
