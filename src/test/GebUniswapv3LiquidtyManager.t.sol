@@ -152,7 +152,6 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
 
     assertTrue(end_uniLiquidity <= init_uniLiquidity);
-    assertTrue(false);
   }
 
   function test_burining_liquidity() public {
@@ -180,51 +179,53 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     assertTrue(end_uniLiquidity == inti_uniLiquidity / 2);
   }
 
-  // function test_multiple_users_adding_liquidity() public {
-  //   // helper_addLiquidity(); //Starting with a bit of liquidity
-  //   (uint256 red, uint256 eht) = manager.getPrices();
-  //   emit log_named_uint("initiRed", red);
-  //   emit log_named_uint("initEth", eht);
+  function test_multiple_users_adding_liquidity() public {
+    uint256 u1_raiAmount = 5 ether;
+    uint256 u1_wethAmount = 2 ether;
 
-  //   (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
+    u1.doApprove(address(testRai), address(manager), u1_raiAmount);
+    u1.doApprove(address(testWeth), address(manager), u1_wethAmount);
 
-  //   //Should make market price increase
-  //   uint256 u1_raiAmount = 5 ether;
-  //   uint256 u1_wethAmount = 2 ether;
-  //   //Before making deposit, we need to send tokens to the pool
-  //   //Those values are roughly the amount needed for 1e18 of liquidity
-  //   testWeth.transfer(address(manager), u1_raiAmount);
-  //   testRai.transfer(address(manager), u1_wethAmount);
+    (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
+    (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
+    uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, 5 ether, 1 ether);
 
-  //   (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
+    u1.doDeposit(u1_liquidity);
 
-  //   uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, 5 ether, 1 ether);
+    // totalSupply should be equal both liquidities
+    assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
-  //   uint128 max = pool.maxLiquidityPerTick();
-  //   emit log_named_uint("max", max);
-  //   emit log_named_uint("u1", u1_liquidity);
-  //   emit log_named_uint("uni", uniLiquidity1);
+    //Getting new pool information
+    (, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
+    assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
 
-  //   u1.doDeposit(u1_liquidity);
+    //Pool position shouldn't have changed
+    assertTrue(lowerTick == lowerTick2);
+    assertTrue(upperTick == upperTick2);
 
-  //   // totalSupply should be equal both liquidities
-  //   assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
+    //Makind redemption price double
+    helper_changeRedemptionPrice(800000000 ether);
 
-  //   //Getting new pool information
-  //   (bytes32 _, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
-  //   assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
+    uint256 u2_raiAmount = 5 ether;
+    uint256 u2_wethAmount = 2 ether;
 
-  //   //Pool position shouldn't have changed
-  //   assertTrue(lowerTick == lowerTick2);
-  //   assertTrue(upperTick == upperTick2);
+    u2.doApprove(address(testRai), address(manager), u2_raiAmount);
+    u2.doApprove(address(testWeth), address(manager), u2_wethAmount);
 
-  //   //Makind redemption price double
-  //   helper_changeRedemptionPrice(2000000000 ether);
-  //   (uint256 red2, uint256 eht2) = manager.getPrices();
-  //   emit log_named_uint("secondRed", red2);
-  //   emit log_named_uint("secondEth", eht2);
-  //   assertTrue(false);
-  // }
+    (int24 u2_lowerTick, int24 u2_upperTick) = manager.getNextTicks();
+    (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
+    uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, u2_lowerTick, u2_upperTick, u2_raiAmount, u2_wethAmount);
+
+    u2.doDeposit(u2_liquidity);
+
+    emit log_named_uint("u2_upperTick", helper_getAbsInt24(u2_upperTick));
+    emit log_named_uint("upperTick2", helper_getAbsInt24(upperTick2));
+    // totalSupply should be equal both liquidities
+    assertTrue(manager.totalSupply() == u1_liquidity + u2_liquidity);
+    assertTrue(u2_upperTick > upperTick2);
+
+    // assertTrue(false);
+  }
 
   function test_sqrt_conversion() public {
     //Using uniswap sdk to arrive at those numbers
@@ -276,7 +277,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
 
     //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
     //But we'll add an approximation
-    u1.doDeposit(7143482264979044174729352);
+    u1.doDeposit(5043482264979044174729352);
   }
 
   function helper_getLiquidityAmountsForTicks(

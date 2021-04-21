@@ -314,7 +314,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
       // Mint this new liquidity. _mintOnUniswap updates the position storage
       //Due to roundings, we get different amounts from LiquidityAmounts.getLiquidityForAmounts and the actual amountOwed we get in the callback
       //We need to find a resonable workaround
-      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity - 1000 ether, abi.encode(address(this), collected0, collected1));
+      _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
     }
   }
 
@@ -397,18 +397,18 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     }
     if (amt1FromThis > 0) {
       if (sender == address(this)) {
-        TransferHelper.safeTransfer(token0, msg.sender, amount1Owed);
+        TransferHelper.safeTransfer(token1, msg.sender, amount1Owed);
       } else {
-        TransferHelper.safeTransfer(token0, msg.sender, amt1FromThis);
+        TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
       }
     }
-    // //Pay what sender owns
-    // if (amount0Owed > amt0FromThis) {
-    //   TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
-    // }
-    // if (amount1Owed > amt1FromThis) {
-    //   TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
-    // }
+    //Pay what sender owns
+    if (amount0Owed > amt0FromThis) {
+      TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
+    }
+    if (amount1Owed > amt1FromThis) {
+      TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
+    }
   }
 
   /**
