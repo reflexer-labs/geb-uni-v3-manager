@@ -10,14 +10,14 @@ import "../uni/UniswapV3Pool.sol";
 contract TestRAI is DSToken {
     constructor(string memory symbol) public DSToken(symbol, symbol) {
         decimals = 6;
-        mint(100000 ether);
+        mint(5000000 ether);
     }
 }
 
 contract TestWETH is DSToken {
     constructor(string memory symbol) public DSToken(symbol, symbol) {
         decimals = 6;
-        mint(10000 ether);
+        mint(1000000 ether);
     }
 }
 
@@ -32,16 +32,9 @@ contract PoolUser {
         manager.deposit(liquidityAmount, address(this));
     }
 
-    function doWithdraw(uint128 liquidityAmount)
-        public
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        )
-    {
+    function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {
         uint128 max_uint128 = uint128(0 - 1);
-        return manager.withdraw(liquidityAmount, address(this), max_uint128, max_uint128);
+        (amount0, amount1) = manager.withdraw(liquidityAmount, address(this), max_uint128, max_uint128);
     }
 
     function doApprove(

@@ -24,6 +24,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     PoolUser u1;
     PoolUser u2;
     PoolUser u3;
+    PoolUser u4_whale;
 
     function setUp() public override {
         // Depoly GEB
@@ -56,12 +57,16 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         u1 = new PoolUser(manager);
         u2 = new PoolUser(manager);
         u3 = new PoolUser(manager);
+        u4_whale = new PoolUser(manager);
 
         address[] memory adds = new address[](3);
         adds[0] = address(u1);
         adds[1] = address(u2);
         adds[2] = address(u3);
         helper_transferToAdds(adds);
+
+        //Make the pool start with some spread out liquidity
+        helper_addWhaleLiquidity();
     }
 
     function test_sanity_uint_variables() public {
@@ -178,10 +183,9 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         emit log_named_uint("_li", _li);
 
         //withdraw half of liquidity
-        (uint256 bal0, uint256 bal1, uint128 liBurned) = u1.doWithdraw(uint128(liq / 2));
+        (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
         emit log_named_uint("bal0", bal0);
         emit log_named_uint("bal1", bal1);
-        emit log_named_uint("liBurned", liBurned);
         assertTrue(manager.balanceOf(address(u1)) == liq / 2);
 
         (uint128 _li2, , , , ) = pool.positions(inti_id);
@@ -282,6 +286,16 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         }
     }
 
+    function helper_addWhaleLiquidity() public {
+        uint256 wethAmount = 10000 ether;
+        uint256 raiAmount = 100000 ether;
+
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, raiAmount, wethAmount);
+
+        pool.mint(address(u4_whale), -887270, 887270, liq, bytes(""));
+    }
+
     function helper_addLiquidity() public {
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
@@ -329,5 +343,14 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         } else if (y != 0) {
             z = 1;
         }
+    }
+
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external {
+        testRai.transfer(msg.sender, amount0Owed);
+        testWeth.transfer(msg.sender, amount0Owed);
     }
 }
