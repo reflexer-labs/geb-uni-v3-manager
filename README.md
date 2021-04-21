@@ -1,6 +1,6 @@
 # Uniswap V3 Liquidity Manager
 
-A contract that manages a Uniswap V2 positions and wraps these positions into an ERC20 on behalf of the LPs.
+A contract that manages Uniswap V3 positions and wraps these positions into an ERC20 on behalf of the LPs.
 
 ## Use Cases
 
