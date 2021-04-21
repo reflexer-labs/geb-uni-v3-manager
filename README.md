@@ -24,15 +24,9 @@ Currently the contract only holds a single position (with one `threshold`) in a 
 
 Imagine the following scenario with 3 tranches:
 
-<<<<<<< HEAD
 -   Tranche 1: 10% of treasury, with a threshold of 5%
 -   Tranche 2: 40% of treasury, with a threshold of 15%
 -   Tranche 3: 50% of treasury, with a threshold of 35%
-=======
--   Tranche 1: 10% of treasury, with a threshold of 5% around the redemption price
--   Tranche 2: 40% of treasury, with a threshold of 15% around the redemption price
--   Tranche 3: 50% of treasury, with a threshold of 35% around the redemption price
->>>>>>> 59db738e32d550bfd6470d1df33df6c7e2407222
 
 These numbers can be optimized for each pool, according to volatility or other factors.
 
