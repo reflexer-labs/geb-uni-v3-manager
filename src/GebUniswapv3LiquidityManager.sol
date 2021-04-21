@@ -46,6 +46,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     OracleRelayer public oracleRelayer;
 
     // --- Constants ---
+    //Used to get the max amount of tokens per liquidity burned
+    uint128 constant MAX_UINT128 = uint128(0 - 1);
     //100% - Not really achievable, because it'll reach max and min ticks
     uint256 constant MAX_THRESHOLD = 10000000;
     // 1% - Quite dangerous because the market price can easily outsing the threshold
@@ -71,8 +73,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     event ModifyParameters(bytes32 parameter, address val);
     event AddAuthorization(address account);
     event RemoveAuthorization(address account);
-    event Deposit(address account, uint256 liquidityAdded);
-    event Withdraw(address account, uint256 liquidityAdded);
+    event Deposit(address sender, address recipient, uint256 liquidityAdded);
+    event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
 
     // --- Auth ---
@@ -125,8 +127,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         bytes32 collateralType_,
         OracleRelayer relayer_
     ) public ERC20(name_, symbol_) {
-        require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
-        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidtyManager/invalid-delay");
+        require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
         //Getting Pool Information
         pool = IUniswapV3Pool(pool_);
@@ -177,13 +179,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
-            require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidtyManager/invalid-thresold");
+            require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
             threshold = data;
         }
         if (parameter == "delay") {
-            require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidtyManager/invalid-delay");
+            require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
             delay = data;
-        } else revert("GebUniswapv3LiquidtyManager/modify-unrecognized-param");
+        } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
         emit ModifyParameters(parameter, data);
     }
 
@@ -210,7 +212,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (OracleLike osm, , ) = oracleRelayer.collateralTypes(collateralType);
         bool valid;
         (ethUsdPrice, valid) = osm.getResultWithValidity();
-        require(valid, "GebUniswapv3LiquidtyManager/invalid-price-feed");
+        require(valid, "GebUniswapv3LiquidityManager/invalid-price-feed");
     }
 
     /**
@@ -271,7 +273,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
      * A round robind could be done where in each deposit only one of the pool's position is rebalanced
      */
-    function deposit(uint128 newLiquidity) external returns (uint256 mintAmount) {
+    function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
+        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         // Loading to stack to save on sloads
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
@@ -285,7 +288,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         //A possible optimization is only rebalance if the the tick diff is significant enough
         if (position.uniLiquidity > 0 && (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             //1.Burn and collect all that we have
-            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
             //2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -297,10 +300,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 collected0,
                 collected1
             );
+            emit Rebalance(msg.sender, block.timestamp);
         }
 
         // 3.Mint our new position on uniswap
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+        lastRebalance = block.timestamp;
 
         // 4.Calculate and mint user's erc20 liquidity tokens
         uint256 __supply = _totalSupply;
@@ -310,14 +315,21 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             mintAmount = uint256(newLiquidity).mul(_totalSupply).div(previousLiquidity);
         }
 
-        _mint(msg.sender, mintAmount);
+        _mint(recipient, mintAmount);
+
+        Deposit(msg.sender, recipient, newLiquidity);
     }
 
     /**
      * @notice Remove liquidity and withdraw the underlying assests
      * @param liquidityAmount The amount of liquidity to withdraw
      */
-    function withdraw(uint256 liquidityAmount)
+    function withdraw(
+        uint256 liquidityAmount,
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    )
         external
         returns (
             uint256 amount0,
@@ -325,6 +337,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             uint128 liquidityBurned
         )
     {
+        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
@@ -332,14 +345,15 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(_liquidityBurned < uint256(0 - 1));
         liquidityBurned = uint128(_liquidityBurned);
 
-        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, liquidityBurned, msg.sender);
+        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, liquidityBurned, recipient, amount0Requested, amount1Requested);
+        emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
     /**
      * @notice Public function to rebalance the pool position to the correct threshold from the redemption price
      */
     function rebalance() external {
-        require(block.timestamp - lastRebalance >= delay, "GebUniswapv3LiquidtyManager/too-soon");
+        require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
         // Read all this from storage to minimize SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
 
@@ -347,7 +361,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
             // Get the fees
-            (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+            (uint256 collected0, uint256 collected1) =
+                _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
             //Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -366,6 +381,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             //We need to find a resonable workaround
             _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
         }
+        //Even if there's no change, we update the time anyway
+        lastRebalance = block.timestamp;
+        emit Rebalance(msg.sender, block.timestamp);
     }
 
     // --- Uniswap Related Functions ---
@@ -402,24 +420,25 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         int24 lowerTick,
         int24 upperTick,
         uint128 burnedLiquidity,
-        address recipient
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
     ) private returns (uint256 collected0, uint256 collected1) {
-        // We can request MAX_INT, and Uniswap will just give whatever we're owed
-        uint128 requestAmount0 = uint128(0) - 1;
-        uint128 requestAmount1 = uint128(0) - 1;
-
         (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
+
+        //Copying to stack variables to avoid modifying function parameters
+        (uint128 amt0, uint128 amt1) = (amount0Requested, amount1Requested);
 
         // If we're withdrawing for a specific user, then we only want to withdraw what they're owed
         if (recipient != address(this)) {
             // TODO: can we trust Uniswap and safely cast here?
-            requestAmount0 = uint128(_owed0);
-            requestAmount1 = uint128(_owed1);
+            amt0 = uint128(_owed0);
+            amt1 = uint128(_owed1);
         }
         // Collect all owed
-        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, requestAmount0, requestAmount1);
-        //update position
-        // All other factors are still the same
+        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amt0, amt1);
+
+        // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
         position.uniLiquidity = _liquidity;
     }

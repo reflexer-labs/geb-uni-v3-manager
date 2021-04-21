@@ -29,7 +29,7 @@ contract PoolUser {
     }
 
     function doDeposit(uint128 liquidityAmount) public {
-        manager.deposit(liquidityAmount);
+        manager.deposit(liquidityAmount, address(this));
     }
 
     function doWithdraw(uint128 liquidityAmount)
@@ -40,7 +40,8 @@ contract PoolUser {
             uint128 liquidityBurned
         )
     {
-        return manager.withdraw(liquidityAmount);
+        uint128 max_uint128 = uint128(0 - 1);
+        return manager.withdraw(liquidityAmount, address(this), max_uint128, max_uint128);
     }
 
     function doApprove(
