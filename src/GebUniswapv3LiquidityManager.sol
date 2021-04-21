@@ -325,9 +325,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             uint128 liquidityBurned
         )
     {
+        uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
-        uint256 _liquidityBurned = liquidityAmount.mul(_totalSupply).div(position.uniLiquidity);
+        uint256 _liquidityBurned = liquidityAmount.mul(__supply).div(position.uniLiquidity);
         require(_liquidityBurned < uint256(0 - 1));
         liquidityBurned = uint128(_liquidityBurned);
 
