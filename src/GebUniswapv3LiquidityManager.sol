@@ -329,23 +329,15 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         address recipient,
         uint128 amount0Requested,
         uint128 amount1Requested
-    )
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        )
-    {
+    ) external returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
         uint256 _liquidityBurned = liquidityAmount.mul(__supply).div(position.uniLiquidity);
         require(_liquidityBurned < uint256(0 - 1));
-        liquidityBurned = uint128(_liquidityBurned);
 
-        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, liquidityBurned, recipient, amount0Requested, amount1Requested);
+        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient, amount0Requested, amount1Requested);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
@@ -376,9 +368,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                     collected1
                 );
 
-            // Mint this new liquidity. _mintOnUniswap updates the position storage
-            //Due to roundings, we get different amounts from LiquidityAmounts.getLiquidityForAmounts and the actual amountOwed we get in the callback
-            //We need to find a resonable workaround
             _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
         }
         //Even if there's no change, we update the time anyway
@@ -424,19 +413,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 amount0Requested,
         uint128 amount1Requested
     ) private returns (uint256 collected0, uint256 collected1) {
+        // Amount owed migth be more than requested. What do we do?
         (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
 
-        //Copying to stack variables to avoid modifying function parameters
-        (uint128 amt0, uint128 amt1) = (amount0Requested, amount1Requested);
-
-        // If we're withdrawing for a specific user, then we only want to withdraw what they're owed
-        if (recipient != address(this)) {
-            // TODO: can we trust Uniswap and safely cast here?
-            amt0 = uint128(_owed0);
-            amt1 = uint128(_owed1);
-        }
         // Collect all owed
-        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amt0, amt1);
+        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
 
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
