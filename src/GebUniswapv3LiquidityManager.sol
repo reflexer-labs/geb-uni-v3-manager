@@ -1,13 +1,23 @@
 pragma solidity ^0.6.7;
 
 import "ds-math/math.sol";
-import "../lib/geb/src/OracleRelayer.sol";
 import { ERC20 } from "./erc20/ERC20.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
+
+abstract contract OracleLike {
+    function getResultsWithValidity()
+        public
+        virtual
+        returns (
+            uint256,
+            uint256,
+            bool
+        );
+}
 
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
@@ -43,7 +53,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
     // Address of oracle relayer to get prices from
-    OracleRelayer public oracleRelayer;
+    OracleLike public oracle;
 
     // --- Constants ---
     // Used to get the max amount of tokens per liquidity burned
@@ -115,7 +125,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param threshold_ The liquidity threshold around the redemption price
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
-     * @param relayer_ Address of the already deployed oracle relayer
+     * @param oracle_ Address of the already deployed oracle that provides both prices
      */
     constructor(
         string memory name_,
@@ -125,7 +135,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 delay_,
         address pool_,
         bytes32 collateralType_,
-        OracleRelayer relayer_
+        OracleLike oracle_
     ) public ERC20(name_, symbol_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
@@ -147,7 +157,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         delay = delay_;
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         collateralType = collateralType_;
-        oracleRelayer = relayer_;
+        oracle = oracle_;
 
         // Starting position
         (int24 _lower, int24 _upper) = getNextTicks();
@@ -197,8 +207,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
-        if (parameter == "oracleRelayer") {
-            oracleRelayer = OracleRelayer(data);
+        if (parameter == "oracle") {
+            oracle = OracleLike(data);
         }
         emit ModifyParameters(parameter, data);
     }
@@ -210,11 +220,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return tokenPrice The other token's price
      */
     function getPrices() public returns (uint256 redemptionPrice, uint256 tokenPrice) {
-        redemptionPrice = oracleRelayer.redemptionPrice();
-        (OracleLike osm, , ) = oracleRelayer.collateralTypes(collateralType);
-
         bool valid;
-        (tokenPrice, valid) = osm.getResultWithValidity();
+        (redemptionPrice, tokenPrice, valid) = oracle.getResultsWithValidity();
         require(valid, "GebUniswapv3LiquidityManager/invalid-price");
     }
 

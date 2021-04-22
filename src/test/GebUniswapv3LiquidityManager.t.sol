@@ -3,16 +3,18 @@ pragma solidity ^0.6.7;
 import "ds-test/test.sol";
 import "ds-math/math.sol";
 import "../GebUniswapv3LiquidityManager.sol";
-import "../../lib/geb-deploy/src/test/GebDeploy.t.base.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
 import "./TestHelpers.sol";
+import "./OracleLikeMock.sol";
 
-contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
+contract GebUniswapv3LiquidtyManagerTest is DSTest {
+    Hevm hevm;
     GebUniswapV3LiquidityManager manager;
     UniswapV3Pool pool;
     TestRAI testRai;
     TestWETH testWeth;
+    OracleLikeMock oracle;
     address token0;
     address token1;
 
@@ -26,12 +28,11 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
     PoolUser u3;
     PoolUser u4_whale;
 
-    function setUp() public override {
+    function setUp() public {
         // Depoly GEB
-        super.setUp();
+        hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+        oracle = new OracleLikeMock();
 
-        deployIndex(bytes32("ENGLISH"));
-        helper_addAuth();
         // Deploy each token
         testRai = new TestRAI("RAI");
         testWeth = new TestWETH("WETH");
@@ -43,16 +44,7 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         //We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
         //This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         pool.initialize(uint160(initialPoolPrice));
-        manager = new GebUniswapV3LiquidityManager(
-            "Geb-Uniswap-Manager",
-            "GUM",
-            address(testRai),
-            threshold,
-            delay,
-            address(pool),
-            bytes32("ETH"),
-            oracleRelayer
-        );
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
 
         u1 = new PoolUser(manager);
         u2 = new PoolUser(manager);
@@ -87,8 +79,8 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         address pool_ = address(manager.pool());
         assertTrue(pool_ == address(pool));
 
-        address relayer_ = address(manager.oracleRelayer());
-        assertTrue(relayer_ == address(oracleRelayer));
+        address relayer_ = address(manager.oracle());
+        assertTrue(relayer_ == address(oracle));
     }
 
     function test_sanity_pool() public {
@@ -109,10 +101,10 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         u1.doApprove(address(testRai), address(manager), raiAmount);
         u1.doApprove(address(testWeth), address(manager), wethAmount);
 
-        (uint160 currPrice, , , , , , ) = pool.slot0();
+        (uint160 price1, , , , , , ) = pool.slot0();
         (int24 newLower, int24 newUpper) = manager.getNextTicks();
 
-        uint128 liq = helper_getLiquidityAmountsForTicks(currPrice, newLower, newUpper, 10 ether, 1 ether);
+        uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 10 ether, 1 ether);
         emit log_named_uint("liq", liq);
 
         {
@@ -262,21 +254,8 @@ contract GebUniswapv3LiquidtyManagerTest is GebDeployTestBase {
         _pool = fac.createPool(token0, token1, uint24(fee));
     }
 
-    function helper_addAuth() public {
-        // auth in stabilityFeeTreasury
-        address usr = address(govActions);
-        bytes32 tag;
-        assembly {
-            tag := extcodehash(usr)
-        }
-        bytes memory fax = abi.encodeWithSignature("addAuthorization(address,address)", address(oracleRelayer), address(this));
-        uint256 eta = now;
-        pause.scheduleTransaction(usr, tag, fax, eta);
-        pause.executeTransaction(usr, tag, fax, eta);
-    }
-
     function helper_changeRedemptionPrice(uint256 newPrice) public {
-        oracleRelayer.modifyParameters("redemptionPrice", newPrice);
+        oracle.setSystemCoinPrice(newPrice);
     }
 
     function helper_transferToAdds(address[] memory adds) public {
