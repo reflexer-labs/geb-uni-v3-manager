@@ -2,23 +2,27 @@ pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
 import "../GebUniswapv3LiquidityManager.sol";
-import "../../lib/geb-deploy/src/test/GebDeploy.t.base.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
+import "../erc20/ERC20.sol";
 
 // --- Token Contracts ---
-contract TestRAI is DSToken {
-    constructor(string memory symbol) public DSToken(symbol, symbol) {
-        decimals = 6;
-        mint(5000000 ether);
+contract TestRAI is ERC20 {
+    constructor(string memory symbol) public ERC20(symbol, symbol) {
+        _mint(msg.sender, 5000000 ether);
     }
 }
 
-contract TestWETH is DSToken {
-    constructor(string memory symbol) public DSToken(symbol, symbol) {
-        decimals = 6;
-        mint(1000000 ether);
+contract TestWETH is ERC20 {
+    constructor(string memory symbol) public ERC20(symbol, symbol) {
+        _mint(msg.sender, 1000000 ether);
     }
+}
+
+abstract contract Hevm {
+    function warp(uint256) public virtual;
+
+    function roll(uint256) public virtual;
 }
 
 contract PoolUser {
@@ -42,6 +46,6 @@ contract PoolUser {
         address who,
         uint256 amount
     ) public {
-        DSToken(token).approve(who, amount);
+        IERC20(token).approve(who, amount);
     }
 }
