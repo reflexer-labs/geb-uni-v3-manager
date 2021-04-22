@@ -30,9 +30,8 @@ contract Fuzzer is GebUniswapv3LiquidtyManagerTest {
         manager.withdraw(liquidityAmount, recipient, max_uint128, max_uint128);
     }
 
-     function echidna_manager_supply_equal_liquidity() public returns (bool) {
+    function echidna_manager_supply_equal_liquidity() public returns (bool) {
         (uint128 _liquidity, , , , ) = pool.positions(manager.position.id);
         return (manager.totalSupply() == _liquidity);
     }
-}
 }
