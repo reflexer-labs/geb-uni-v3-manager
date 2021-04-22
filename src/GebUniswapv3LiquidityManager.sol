@@ -140,6 +140,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
+        require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
+
         // Setting variables
         threshold = threshold_;
         delay = delay_;
@@ -205,7 +207,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     /**
      * @notice Public function to get both the redemption price for the system coin and the other token's price
      * @return redemptionPrice The redemption price
-     * @return ethUsdPrice The other token's price
+     * @return tokenPrice The other token's price
      */
     function getPrices() public returns (uint256 redemptionPrice, uint256 tokenPrice) {
         redemptionPrice = oracleRelayer.redemptionPrice();
@@ -247,6 +249,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
      * @param liquidity The amount of liquidity to withdraw
+     * @return amount0 The amount of token1 received for the liquidity
      */
     function getToken0FromLiquidity(uint128 liquidity) public view returns (uint256 amount0) {
         amount0 = LiquidityAmounts.getAmount0ForLiquidity(
@@ -259,12 +262,39 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     /**
      * @notice Returns the current amount of token1 for a given liquidity amount
      * @param liquidity The amount of liquidity to withdraw
+     * @return amount1 The amount of token1 received for the liquidity
      */
     function getToken1FromLiquidity(uint128 liquidity) public view returns (uint256 amount1) {
         amount1 = LiquidityAmounts.getAmount1ForLiquidity(
             TickMath.getSqrtRatioAtTick(position.lowerTick),
             TickMath.getSqrtRatioAtTick(position.upperTick),
             liquidity
+        );
+    }
+
+    /**
+     * @notice Returns the current amount of token0 for a given liquidity amount
+     * @param token0Amount The amount of token0 to check
+     * @return liquidity The amount received
+     */
+    function getLiquidityFromToken0(uint256 token0Amount) public view returns (uint128 liquidity) {
+        liquidity = LiquidityAmounts.getLiquidityForAmount0(
+            TickMath.getSqrtRatioAtTick(position.lowerTick),
+            TickMath.getSqrtRatioAtTick(position.upperTick),
+            token0Amount
+        );
+    }
+
+    /**
+     * @notice Returns the current amount of token0 for a given liquidity amount
+     * @param token1Amount The amount of token0 to check
+     * @return liquidity The amount received
+     */
+    function getLiquidityFromToken1(uint256 token1Amount) public view returns (uint128 liquidity) {
+        liquidity = LiquidityAmounts.getLiquidityForAmount1(
+            TickMath.getSqrtRatioAtTick(position.lowerTick),
+            TickMath.getSqrtRatioAtTick(position.upperTick),
+            token1Amount
         );
     }
 
@@ -328,8 +358,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param recipient The address that will receive token0 and token1 tokens
      * @param amount0Requested Minimum amount of token0 requested
      * @param amount1Requested Minimum amount of token1 requested
-     * @return amount0Requested The amount of token0 requested from the pool
-     * @return amount1Requested The amount of token1 requested from the pool
+     * @return amount0 The amount of token0 requested from the pool
+     * @return amount1 The amount of token1 requested from the pool
      */
     function withdraw(
         uint256 liquidityAmount,
@@ -412,8 +442,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param upperTick The upper bound of the range to deposit the liquidity to
      * @param burnedLiquidity The amount of liquidity to burn
      * @param recipient The address to send the tokens to
-     * @return amount0Requested The amount of token0 requested from the pool
-     * @return amount1Requested The amount of token1 requested from the pool
+     * @return collected0 The amount of token0 requested from the pool
+     * @return collected1 The amount of token1 requested from the pool
      */
     function _burnOnUniswap(
         int24 lowerTick,
