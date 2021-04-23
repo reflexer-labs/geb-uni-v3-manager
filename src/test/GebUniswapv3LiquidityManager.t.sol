@@ -42,9 +42,6 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500, initialPoolPrice));
-
-        // We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
-        // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
 
         //Will initialize the pool with current price
