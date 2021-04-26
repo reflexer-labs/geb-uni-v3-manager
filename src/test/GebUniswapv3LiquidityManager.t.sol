@@ -7,8 +7,9 @@ import "../uni/UniswapV3Pool.sol";
 import "./TestHelpers.sol";
 import "./OracleLikeMock.sol";
 
-contract GebUniswapv3LiquidtyManagerTest is DSTest {
+contract GebUniswapv3LiquidityManagerTest is DSTest {
     Hevm hevm;
+    
     GebUniswapV3LiquidityManager manager;
     UniswapV3Pool pool;
     TestRAI testRai;
@@ -28,7 +29,7 @@ contract GebUniswapv3LiquidtyManagerTest is DSTest {
     PoolUser u4_whale;
 
     function setUp() public {
-        // Depoly GEB
+        // Deploy GEB
         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
         oracle = new OracleLikeMock();
 
@@ -45,8 +46,8 @@ contract GebUniswapv3LiquidtyManagerTest is DSTest {
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
 
-        //We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
-        //This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
+        // We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
+        // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         pool.initialize(uint160(initialPoolPrice));
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
 
@@ -61,8 +62,101 @@ contract GebUniswapv3LiquidtyManagerTest is DSTest {
         adds[2] = address(u3);
         helper_transferToAdds(adds);
 
-        //Make the pool start with some spread out liquidity
+        // Make the pool start with some spread out liquidity
         helper_addWhaleLiquidity();
+    }
+    
+    // --- Math ---
+        function sqrt(uint256 y) public pure returns (uint256 z) {
+        if (y > 3) {
+            z = y;
+            uint256 x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
+        }
+    }
+    
+    // --- Helpers ---
+        function helper_deployV3Pool(
+        address _token0,
+        address _token1,
+        uint256 fee
+    ) internal returns (address _pool) {
+        UniswapV3Factory fac = new UniswapV3Factory();
+        _pool = fac.createPool(token0, token1, uint24(fee));
+    }
+
+    function helper_changeRedemptionPrice(uint256 newPrice) public {
+        oracle.setSystemCoinPrice(newPrice);
+    }
+
+    function helper_transferToAdds(address[] memory adds) public {
+        for (uint256 i = 0; i < adds.length; i++) {
+            testWeth.transfer(adds[i], 100 ether);
+            testRai.transfer(adds[i], 100 ether);
+        }
+    }
+
+    function helper_addWhaleLiquidity() public {
+        uint256 wethAmount = 10000 ether;
+        uint256 raiAmount = 100000 ether;
+
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, wethAmount, raiAmount);
+
+        pool.mint(address(u4_whale), -887270, 887270, liq, bytes(""));
+    }
+
+    function helper_addLiquidity() public {
+        uint256 wethAmount = 1 ether;
+        uint256 raiAmount = 10 ether;
+
+        u1.doApprove(address(testRai), address(manager), raiAmount);
+        u1.doApprove(address(testWeth), address(manager), wethAmount);
+
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, wethAmount, raiAmount);
+
+        //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
+        //But we'll add an approximation
+        u1.doDeposit(liq);
+    }
+
+    function helper_getLiquidityAmountsForTicks(
+        uint160 sqrtRatioX96,
+        int24 _lowerTick,
+        int24 upperTick,
+        uint256 t0am,
+        uint256 t1am
+    ) public returns (uint128 liquidity) {
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtRatioX96,
+            TickMath.getSqrtRatioAtTick(_lowerTick),
+            TickMath.getSqrtRatioAtTick(upperTick),
+            t0am,
+            t1am
+        );
+    }
+
+    function helper_getAbsInt24(int24 val) internal returns (uint256 abs) {
+        if (val > 0) {
+            abs = uint256(val);
+        } else {
+            abs = uint256(val * int24(-1));
+        }
+    }
+
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external {
+        testRai.transfer(msg.sender, amount0Owed);
+        testWeth.transfer(msg.sender, amount0Owed);
     }
 
     function test_sanity_uint_variables() public {
@@ -165,7 +259,7 @@ contract GebUniswapv3LiquidtyManagerTest is DSTest {
         assertTrue(end_uniLiquidity <= init_uniLiquidity);
     }
 
-    function test_burining_liquidity() public {
+    function test_burning_liquidity() public {
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
         helper_addLiquidity(); //Starting with a bit of liquidity
@@ -247,96 +341,5 @@ contract GebUniswapv3LiquidtyManagerTest is DSTest {
 
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
         assertTrue(sqrtRedPriceX96 == 154170194117); //Value taken from uniswap sdk
-    }
-
-    function helper_deployV3Pool(
-        address _token0,
-        address _token1,
-        uint256 fee
-    ) internal returns (address _pool) {
-        UniswapV3Factory fac = new UniswapV3Factory();
-        _pool = fac.createPool(token0, token1, uint24(fee));
-    }
-
-    function helper_changeRedemptionPrice(uint256 newPrice) public {
-        oracle.setSystemCoinPrice(newPrice);
-    }
-
-    function helper_transferToAdds(address[] memory adds) public {
-        for (uint256 i = 0; i < adds.length; i++) {
-            testWeth.transfer(adds[i], 100 ether);
-            testRai.transfer(adds[i], 100 ether);
-        }
-    }
-
-    function helper_addWhaleLiquidity() public {
-        uint256 wethAmount = 10000 ether;
-        uint256 raiAmount = 100000 ether;
-
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, wethAmount, raiAmount);
-
-        pool.mint(address(u4_whale), -887270, 887270, liq, bytes(""));
-    }
-
-    function helper_addLiquidity() public {
-        uint256 wethAmount = 1 ether;
-        uint256 raiAmount = 10 ether;
-
-        u1.doApprove(address(testRai), address(manager), raiAmount);
-        u1.doApprove(address(testWeth), address(manager), wethAmount);
-
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, wethAmount, raiAmount);
-
-        //Adding liquidty without changing current price. To use the full amount of tokens we would need to add sqrt(10)
-        //But we'll add an approximation
-        u1.doDeposit(liq);
-    }
-
-    function helper_getLiquidityAmountsForTicks(
-        uint160 sqrtRatioX96,
-        int24 _lowerTick,
-        int24 upperTick,
-        uint256 t0am,
-        uint256 t1am
-    ) public returns (uint128 liquidity) {
-        liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtRatioX96,
-            TickMath.getSqrtRatioAtTick(_lowerTick),
-            TickMath.getSqrtRatioAtTick(upperTick),
-            t0am,
-            t1am
-        );
-    }
-
-    function helper_getAbsInt24(int24 val) internal returns (uint256 abs) {
-        if (val > 0) {
-            abs = uint256(val);
-        } else {
-            abs = uint256(val * int24(-1));
-        }
-    }
-
-    function sqrt(uint256 y) public pure returns (uint256 z) {
-        if (y > 3) {
-            z = y;
-            uint256 x = y / 2 + 1;
-            while (x < z) {
-                z = x;
-                x = (y / x + x) / 2;
-            }
-        } else if (y != 0) {
-            z = 1;
-        }
-    }
-
-    function uniswapV3MintCallback(
-        uint256 amount0Owed,
-        uint256 amount1Owed,
-        bytes calldata data
-    ) external {
-        testRai.transfer(msg.sender, amount0Owed);
-        testWeth.transfer(msg.sender, amount0Owed);
     }
 }
