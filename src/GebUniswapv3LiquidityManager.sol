@@ -43,6 +43,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     uint256 public delay;
     // The timestamp of the last rebalance
     uint256 public lastRebalance;
+    // The last used price for rebalance
+    int24 public lastRebalancePrice;
     // Collateral whose price to read from the oracle relayer
     bytes32 public collateralType;
     // This contracts' position in the Uniswap V3 pool
@@ -161,7 +163,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         oracle = oracle_;
 
         // Starting position
-        (int24 _lower, int24 _upper) = getNextTicks();
+        (int24 _lower, int24 _upper, ) = getNextTicks();
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
 
@@ -190,9 +192,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param parameter The variable to change
      * @param data The value to set for the parameter
      */
-    function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
+    function modifyParameters(bytes32 parameter, uint256 data) external {
         if (parameter == "threshold") {
             require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+            require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
             threshold = data;
         } else if (parameter == "delay") {
             require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
@@ -230,7 +233,14 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return _nextLower The lower bound of the range
      * @return _nextUpper The upper bound of the range
      */
-    function getNextTicks() public returns (int24 _nextLower, int24 _nextUpper) {
+    function getNextTicks()
+        public
+        returns (
+            int24 _nextLower,
+            int24 _nextUpper,
+            int24 spacedTick
+        )
+    {
         // 1. Get prices from the oracle relayer
         (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
 
@@ -324,7 +334,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
 
-        (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
+        (int24 _nextLowerTick, int24 _nextUpperTick, int24 price) = getNextTicks();
+        lastRebalancePrice = price;
 
         uint128 compoundLiquidity = 0;
         uint256 collected0 = 0;
@@ -350,7 +361,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         }
 
         // 3.Mint our new position on Uniswap
-        _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+        uint128 liquiditySum = newLiquidity+ compoundLiquidity;
+        require(liquiditySum >= newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
+
+        _mintOnUniswap(_nextLowerTick, _nextUpperTick, liquiditySum, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
 
         // 4.Calculate and mint a user's ERC20 liquidity tokens
@@ -402,7 +416,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         (uint160 sqr6, , , , , , ) = pool.slot0();
 
-        (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
+        (int24 _nextLowerTick, int24 _nextUpperTick, int24 price) = getNextTicks();
+        lastRebalancePrice = price;
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
             // Get the fees
