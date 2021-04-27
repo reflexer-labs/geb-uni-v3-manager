@@ -290,13 +290,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u1.doApprove(address(testWeth), address(manager), wethAmount);
 
         (uint160 price1, , , , , , ) = pool.slot0();
-        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
         emit log_named_uint("liq", liq);
 
         {
-            (int24 _nlower, int24 _nupper) = manager.getNextTicks();
+            (int24 _nlower, int24 _nupper, ) = manager.getNextTicks();
 
             (uint160 currPrice, , , , , , ) = pool.slot0();
             (uint256 amount0, ) =
@@ -346,6 +346,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         helper_changeRedemptionPrice(1000000000 ether); //Making RAI a bit more expensive
 
+<<<<<<< HEAD
         (int24 newLower, int24 newUpper) = manager.getNextTicks();
         if (newLower > 0) {
             emit log_named_uint("pos newLower", helper_getAbsInt24(newLower));
@@ -358,6 +359,9 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         } else {
             emit log_named_uint("neg newUpper", helper_getAbsInt24(newUpper));
         }
+=======
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
+>>>>>>> setup echidna
 
         // The lower bound might still be the same, since is current the MIN_TICK
         assertTrue(init_upperTick != newUpper);
@@ -549,7 +553,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testRai), address(manager), u2_raiAmount);
         u2.doApprove(address(testWeth), address(manager), u2_wethAmount);
 
-        (int24 u2_lowerTick, int24 u2_upperTick) = manager.getNextTicks();
+        (int24 u2_lowerTick, int24 u2_upperTick, ) = manager.getNextTicks();
         (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, u2_lowerTick, u2_upperTick, u2_wethAmount, u2_raiAmount);
 
@@ -569,7 +573,24 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
 
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
+<<<<<<< HEAD
         assertTrue(sqrtRedPriceX96 == 140737488355); //Value taken from uniswap sdk
+=======
+        assertTrue(sqrtRedPriceX96 == 154170194117); //Value taken from uniswap sdk
+    }
+
+    function helper_deployV3Pool(
+        address _token0,
+        address _token1,
+        uint256 fee,
+        uint160 _initialPoolPrice
+    ) internal returns (address _pool) {
+        UniswapV3Factory fac = new UniswapV3Factory();
+        _pool = fac.createPool(token0, token1, uint24(fee));
+        //We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
+        //This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
+        UniswapV3Pool(_pool).initialize(_initialPoolPrice);
+>>>>>>> setup echidna
     }
 
     function testFail_try_minting_zero_liquidity() public {
