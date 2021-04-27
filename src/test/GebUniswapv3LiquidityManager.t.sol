@@ -51,10 +51,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         pool.initialize(uint160(initialPoolPrice));
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
 
-        u1 = new PoolUser(manager);
-        u2 = new PoolUser(manager);
-        u3 = new PoolUser(manager);
-        u4_whale = new PoolUser(manager);
+        u1 = new PoolUser(manager, pool, testRai, testWeth);
+        u2 = new PoolUser(manager, pool, testRai, testWeth);
+        u3 = new PoolUser(manager, pool, testRai, testWeth);
+        u4_whale = new PoolUser(manager, pool, testRai, testWeth);
 
         address[] memory adds = new address[](3);
         adds[0] = address(u1);
@@ -150,6 +150,20 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         }
     }
 
+    function helper_get_random_zeroForOne_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
+        // help echidna a bit by calculating a valid sqrtPriceLimitX96 using the amount as random seed
+        (uint160 currentPrice, , , , , , ) = pool.slot0();
+        uint160 minimumPrice = TickMath.MIN_SQRT_RATIO;
+        sqrtPriceLimitX96 = minimumPrice + uint160((uint256(_amountSpecified > 0 ? _amountSpecified : -_amountSpecified) % (currentPrice - minimumPrice)));
+    }
+
+    function helper_get_random_oneForZero_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
+        // help echidna a bit by calculating a valid sqrtPriceLimitX96 using the amount as random seed
+        (uint160 currentPrice, , , , , , ) = pool.slot0();
+        uint160 maximumPrice = TickMath.MAX_SQRT_RATIO;
+        sqrtPriceLimitX96 = currentPrice + uint160((uint256(_amountSpecified > 0 ? _amountSpecified : -_amountSpecified) % (maximumPrice - currentPrice)));
+    }
+
     function uniswapV3MintCallback(
         uint256 amount0Owed,
         uint256 amount1Owed,
@@ -208,6 +222,16 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         address newOracle = address(0x4);
         manager.modifyParameters(bytes32("oracle"), newOracle);
         assertTrue(address(manager.oracle()) == newOracle);
+    }
+
+    function testFail_thirdyParty_changingParameter() public {
+        bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,uint256)", bytes32("threshold"), 20000);
+        u1.doArbitrary(address(manager), data);
+    }
+
+    function testFail_thirdyParty_changingOracle() public {
+        bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,address)", bytes32("oracle"), address(4));
+        u1.doArbitrary(address(manager), data);
     }
 
     function test_adding_liquidity() public {
@@ -277,6 +301,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(end_uniLiquidity <= init_uniLiquidity);
     }
 
+    function testFail_early_rebalancing() public {
+        hevm.warp(2 days); //Advance to the future
+        manager.rebalance(); // should pass
+        hevm.warp(2 minutes); //Advance to the future
+        manager.rebalance(); // should fail
+    }
+
     function test_burning_liquidity() public {
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
@@ -303,6 +334,26 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         (bytes32 end_id, , , uint128 end_uniLiquidity) = manager.position();
         assertTrue(end_uniLiquidity - 1 == inti_uniLiquidity / 2);
+    }
+
+    function test_collecting_fees() public {
+        uint256 wethAmount = 1 ether;
+        uint256 raiAmount = 10 ether;
+
+        u2.doApprove(address(testRai), address(manager), raiAmount);
+        u2.doApprove(address(testWeth), address(manager), wethAmount);
+
+        (uint160 price1, , , , , , ) = pool.slot0();
+        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+
+        uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
+        u2.doDeposit(liq);
+
+        uint128 _amount = 20 ether;
+        uint160 sqrtPriceLimitX96 = helper_get_random_zeroForOne_priceLimit(_amount);
+        int256 _amountSpecified = int256(_amount);
+        emit log_named_uint("_amount", _amount);
+        u3.doSwap(address(u3), true, _amountSpecified, sqrtPriceLimitX96, new bytes(0));
     }
 
     function test_multiple_users_adding_liquidity() public {
