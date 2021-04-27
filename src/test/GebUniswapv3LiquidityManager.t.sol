@@ -9,7 +9,7 @@ import "./OracleLikeMock.sol";
 
 contract GebUniswapv3LiquidityManagerTest is DSTest {
     Hevm hevm;
-    
+
     GebUniswapV3LiquidityManager manager;
     UniswapV3Pool pool;
     TestRAI testRai;
@@ -65,9 +65,9 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         // Make the pool start with some spread out liquidity
         helper_addWhaleLiquidity();
     }
-    
+
     // --- Math ---
-        function sqrt(uint256 y) public pure returns (uint256 z) {
+    function sqrt(uint256 y) public pure returns (uint256 z) {
         if (y > 3) {
             z = y;
             uint256 x = y / 2 + 1;
@@ -79,9 +79,9 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
             z = 1;
         }
     }
-    
+
     // --- Helpers ---
-        function helper_deployV3Pool(
+    function helper_deployV3Pool(
         address _token0,
         address _token1,
         uint256 fee
@@ -190,6 +190,24 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         (uint160 poolPrice_, , , , , , ) = pool.slot0();
         assertTrue(poolPrice_ == initialPoolPrice);
+    }
+
+    function test_modify_threshold() public {
+        uint256 newThreshold = 200000;
+        manager.modifyParameters(bytes32("threshold"), newThreshold);
+        assertTrue(manager.threshold() == newThreshold);
+    }
+
+    function test_modify_delay() public {
+        uint256 newDelay = 340 minutes;
+        manager.modifyParameters(bytes32("delay"), newDelay);
+        assertTrue(manager.delay() == newDelay);
+    }
+
+    function test_modify_oracle() public {
+        address newOracle = address(0x4);
+        manager.modifyParameters(bytes32("oracle"), newOracle);
+        assertTrue(address(manager.oracle()) == newOracle);
     }
 
     function test_adding_liquidity() public {
@@ -311,7 +329,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(lowerTick == lowerTick2);
         assertTrue(upperTick == upperTick2);
 
-        //Makind redemption price double
+        //Makind redemption price change
         helper_changeRedemptionPrice(800000000 ether);
 
         uint256 u2_raiAmount = 5 ether;
