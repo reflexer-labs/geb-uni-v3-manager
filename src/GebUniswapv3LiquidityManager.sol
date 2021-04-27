@@ -139,6 +139,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
+        authorizedAccounts[msg.sender] = 1;
+
         // Getting pool information
         pool = IUniswapV3Pool(pool_);
 
@@ -192,8 +194,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         if (parameter == "threshold") {
             require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
             threshold = data;
-        }
-        if (parameter == "delay") {
+        } else if (parameter == "delay") {
             require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
             delay = data;
         } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
