@@ -8,13 +8,13 @@ import "../erc20/ERC20.sol";
 
 // --- Token Contracts ---
 contract TestRAI is ERC20 {
-    constructor(string memory symbol) public ERC20(symbol, symbol) {
+    constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
         _mint(msg.sender, 5000000 ether);
     }
 }
 
 contract TestWETH is ERC20 {
-    constructor(string memory symbol) public ERC20(symbol, symbol) {
+    constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
         _mint(msg.sender, 1000000 ether);
     }
 }
@@ -91,9 +91,23 @@ contract PoolUser {
         bool zeroForOne,
         int256 amountSpecified,
         uint160 sqrtPriceLimitX96,
+        bytes memory data
+    ) public {
+        pool.swap(recipient, zeroForOne, amountSpecified, sqrtPriceLimitX96, data);
+    }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
         bytes calldata data
     ) external {
-        pool.swap(recipient, zeroForOne, amountSpecified, sqrtPriceLimitX96, data);
+        if (address(pool.token0()) == address(rai)) {
+            if (amount0Delta > 0) rai.transfer(msg.sender, uint256(amount0Delta));
+            if (amount1Delta > 0) weth.transfer(msg.sender, uint256(amount1Delta));
+        } else {
+            if (amount1Delta > 0) rai.transfer(msg.sender, uint256(amount1Delta));
+            if (amount0Delta > 0) weth.transfer(msg.sender, uint256(amount0Delta));
+        }
     }
 
     function uniswapV3MintCallback(
@@ -101,8 +115,13 @@ contract PoolUser {
         uint256 amount1Owed,
         bytes calldata data
     ) external {
-        rai.transfer(msg.sender, amount0Owed);
-        weth.transfer(msg.sender, amount0Owed);
+        if (address(pool.token0()) == address(rai)) {
+            rai.transfer(msg.sender, amount0Owed);
+            weth.transfer(msg.sender, amount1Owed);
+        } else {
+            rai.transfer(msg.sender, amount1Owed);
+            weth.transfer(msg.sender, amount0Owed);
+        }
     }
 
     function doArbitrary(address target, bytes calldata data) external {
