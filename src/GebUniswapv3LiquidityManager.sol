@@ -327,7 +327,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected0 = 0;
         uint256 collected1 = 0;
 
-        emit DEPOL(position.uniLiquidity);
         // A possible optimization is to only rebalance if the tick diff is significant enough
         if (position.uniLiquidity > 0 || (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
@@ -343,8 +342,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 collected0,
                 collected1 + 1
             );
-
-            emit DEPOL(compoundLiquidity);
 
             emit Rebalance(msg.sender, block.timestamp);
         }
@@ -420,13 +417,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                     TickMath.getSqrtRatioAtTick(_nextLowerTick),
                     TickMath.getSqrtRatioAtTick(_nextUpperTick),
                     collected0,
-                    collected1
+                    collected1 + 1
                 );
 
-            // Weird scenario, but it could happen. The pool will be without a position
-            if (compoundLiquidity > 0) {
-                _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
-            }
+            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0 + 1, collected1 + 1));
         }
 
         // Even if there's no change, we still update the time
@@ -491,6 +485,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         position.uniLiquidity = _liquidity;
     }
 
+    event DEBUGBAL(uint256 b);
+
     /**
      * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
@@ -505,6 +501,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(msg.sender == address(pool));
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
+
+        emit DEBUGBAL(ERC20(token0).balanceOf(address(this)));
+        emit DEBUGBAL(ERC20(token1).balanceOf(address(this)));
 
         // Pay what this contract owes
         if (amt0FromThis > 0) {
@@ -529,5 +528,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         if (amount1Owed > amt1FromThis) {
             TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
         }
+
+        emit DEBUGBAL(ERC20(token0).balanceOf(address(this)));
+        emit DEBUGBAL(ERC20(token1).balanceOf(address(this)));
     }
 }

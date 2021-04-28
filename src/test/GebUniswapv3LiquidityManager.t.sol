@@ -185,7 +185,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     function helper_do_swap() public {
         (uint160 currentPrice, , , , , , ) = pool.slot0();
         uint160 sqrtLimitPrice = currentPrice - 100000000000000;
-        pool.swap(address(this), false, 10000 ether, sqrtLimitPrice, bytes(""));
+        pool.swap(address(this), true, 10 ether, sqrtLimitPrice, bytes(""));
     }
 
     function helper_get_random_zeroForOne_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
@@ -331,6 +331,9 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(2); //Starting with a bit of liquidity
         helper_addLiquidity(3); //Starting with a bit of liquidity
 
+        testRai.transfer(address(manager), 10);
+        testWeth.transfer(address(manager), 10);
+
         (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity) = manager.position();
         if (init_lowerTick > 0) {
             emit log_named_uint("pos init_lowerTick", helper_getAbsInt24(init_lowerTick));
@@ -437,9 +440,21 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (int24 newLower, int24 newUpper) = manager.getNextTicks();
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
+
+        uint256 bal0w = testWeth.balanceOf(address(u2));
+        uint256 bal0r = testRai.balanceOf(address(u2));
         u2.doDeposit(liq);
 
         helper_do_swap();
+
+        u2.doWithdraw(liq);
+
+        uint256 bal1w = testWeth.balanceOf(address(u2));
+        uint256 bal1r = testRai.balanceOf(address(u2));
+        emit log_named_uint("bal0w", bal0w);
+        emit log_named_uint("bal0r", bal0r);
+        emit log_named_uint("bal1w", bal1w);
+        emit log_named_uint("bal1r", bal1r);
         // Pretty hard to test this,tbh
         (uint160 price2, , , , , , ) = pool.slot0();
 
@@ -454,7 +469,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("feeGrowthInside1LastX128", feeGrowthInside1LastX128);
         emit log_named_uint("tokensOwed0", tokensOwed0);
         emit log_named_uint("tokensOwed1", tokensOwed1);
-        assertTrue(false);
+
+        assertTrue(bal1w > bal0w);
     }
 
     function test_multiple_users_adding_liquidity() public {
