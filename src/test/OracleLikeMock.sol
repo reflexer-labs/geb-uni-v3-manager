@@ -10,7 +10,7 @@ contract OracleLikeMock is OracleLike {
 
     constructor() public {
         _collateralPrice = 300 ether;
-        _redemptionPrice = 1000000000 ether;
+        _redemptionPrice = 1200000000 ether;
     }
 
     /**
