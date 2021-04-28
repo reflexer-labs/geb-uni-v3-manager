@@ -38,11 +38,6 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         testWeth = new TestWETH("WETH");
         (token0, token1) = address(testRai) < address(testWeth) ? (address(testRai), address(testWeth)) : (address(testWeth), address(testRai));
 
-        emit log_named_address("testRai", address(testRai));
-        emit log_named_address("testWeth", address(testWeth));
-        emit log_named_address("token0", address(token0));
-        emit log_named_address("token1", address(token1));
-
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
 
@@ -148,6 +143,12 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         } else {
             abs = uint256(val * int24(-1));
         }
+    }
+
+    function helper_do_swap() public {
+        (uint160 currentPrice, , , , , , ) = pool.slot0();
+        uint160 sqrtLimitPrice = currentPrice + 1000000;
+        u3.doSwap(address(u3), false, 1 ether, sqrtTargetPrice, bytes(""));
     }
 
     function helper_get_random_zeroForOne_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
@@ -349,11 +350,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
         u2.doDeposit(liq);
 
-        uint128 _amount = 20 ether;
-        uint160 sqrtPriceLimitX96 = helper_get_random_zeroForOne_priceLimit(_amount);
-        int256 _amountSpecified = int256(_amount);
-        emit log_named_uint("_amount", _amount);
-        u3.doSwap(address(u3), true, _amountSpecified, sqrtPriceLimitX96, new bytes(0));
+        helper_do_swap();
+        // Pretty hard to test this,tbh
     }
 
     function test_multiple_users_adding_liquidity() public {
