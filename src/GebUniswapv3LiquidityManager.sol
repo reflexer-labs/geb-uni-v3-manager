@@ -305,6 +305,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         );
     }
 
+    event DEPO(uint256 c);
+    event DEPOL(uint128 c);
+
     /**
      * @notice Add liquidity to this uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
@@ -324,8 +327,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected0 = 0;
         uint256 collected1 = 0;
 
+        emit DEPOL(position.uniLiquidity);
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (position.uniLiquidity > 0 && (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (position.uniLiquidity > 0 || (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
@@ -337,8 +341,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 TickMath.getSqrtRatioAtTick(_nextLowerTick),
                 TickMath.getSqrtRatioAtTick(_nextUpperTick),
                 collected0,
-                collected1
+                collected1 + 1
             );
+
+            emit DEPOL(compoundLiquidity);
+
             emit Rebalance(msg.sender, block.timestamp);
         }
 
@@ -392,6 +399,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
         // Read all this from storage to minimize SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
+        (uint160 sqr6, , , , , , ) = pool.slot0();
+        emit DEBUG(sqr6);
+        emit DEBUG(TickMath.getSqrtRatioAtTick(_currentLowerTick));
+        emit DEBUG(TickMath.getSqrtRatioAtTick(_currentUpperTick));
 
         (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
 
@@ -412,13 +423,18 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                     collected1
                 );
 
-            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
+            // Weird scenario, but it could happen. The pool will be without a position
+            if (compoundLiquidity > 0) {
+                _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
+            }
         }
 
         // Even if there's no change, we still update the time
         lastRebalance = block.timestamp;
         emit Rebalance(msg.sender, block.timestamp);
     }
+
+    event DEBUG(uint160 val);
 
     // --- Uniswap Related Functions ---
     /**
@@ -443,6 +459,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         position.uniLiquidity = _liquidity;
     }
 
+    event DECOLL(uint256 v);
+
     /**
      * @notice Helper function to burn a position
      * @param lowerTick The lower bound of the range to deposit the liquidity to
@@ -462,10 +480,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     ) private returns (uint256 collected0, uint256 collected1) {
         // Amount owed migth be more than requested. What do we do?
         (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
-
+        emit DECOLL(_owed0);
+        emit DECOLL(_owed1);
         // Collect all owed
         (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
-
+        emit DECOLL(collected0);
+        emit DECOLL(collected1);
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
         position.uniLiquidity = _liquidity;
