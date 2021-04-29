@@ -330,8 +330,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(2); //Starting with a bit of liquidity
         helper_addLiquidity(3); //Starting with a bit of liquidity
 
-        testRai.transfer(address(manager), 10);
-        testWeth.transfer(address(manager), 10);
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
 
         (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity) = manager.position();
         if (init_lowerTick > 0) {
@@ -477,7 +477,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(1); //Starting with a bit of liquidity
         uint256 u1_balance = manager.balanceOf(address(u1));
         assert(u1_balance == manager.totalSupply());
-        
+
         helper_addLiquidity(2); //Starting with a bit of liquidity
         uint256 u2_balance = manager.balanceOf(address(u2));
         assert(u1_balance + u2_balance == manager.totalSupply());
@@ -485,6 +485,38 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(3); //Starting with a bit of liquidity
         uint256 u3_balance = manager.balanceOf(address(u3));
         assert(u1_balance + u2_balance + u3_balance == manager.totalSupply());
+    }
+
+    function test_mint_transfer_and_burn() public {
+        helper_addLiquidity(1); //Starting with a bit of liquidity
+        u1.doTransfer(address(manager), address(u3), manager.balanceOf(address(u1)));
+        u3.doWithdraw(uint128(manager.balanceOf(address(u3))));
+    }
+
+    function test_liquidty_proportional_to_balance() public {
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+        helper_addLiquidity(1);
+
+        //Make Rai twice more Expensive
+        helper_changeRedemptionPrice(2000000000 ether);
+
+        //Add a send liquidity
+        helper_addLiquidity(1);
+
+        //Return to it's otiginal price
+        helper_changeRedemptionPrice(1200000000 ether);
+        hevm.warp(2 days);
+
+        manager.rebalance();
+
+        (bytes32 id, , , uint128 uniLiquidity1) = manager.position();
+        (uint128 _liquidity, , , , ) = pool.positions(id);
+        emit log_named_uint("_liquidity", _liquidity);
+        emit log_named_uint("liq", uniLiquidity1);
+        emit log_named_uint("bal", manager.balanceOf(address(u1)));
+        //user should be able to withdraw it's whole balance. Balance != Liquidity
+        u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
     }
 
     function test_multiple_users_adding_liquidity() public {

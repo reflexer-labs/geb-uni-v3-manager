@@ -339,8 +339,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 sqrtRatioX96,
                 TickMath.getSqrtRatioAtTick(_nextLowerTick),
                 TickMath.getSqrtRatioAtTick(_nextUpperTick),
-                collected0,
-                collected1
+                collected0 + 1,
+                collected1 + 1
             );
 
             emit Rebalance(msg.sender, block.timestamp);
@@ -385,7 +385,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
-        uint256 _liquidityBurned = liquidityAmount.mul(__supply).div(position.uniLiquidity);
+        uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
         require(_liquidityBurned < uint256(0 - 1));
 
         (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient, amount0Requested, amount1Requested);
@@ -416,11 +416,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                     sqrtRatioX96,
                     TickMath.getSqrtRatioAtTick(_nextLowerTick),
                     TickMath.getSqrtRatioAtTick(_nextUpperTick),
-                    collected0,
+                    collected0 + 1,
                     collected1 + 1
                 );
 
-            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0 + 1, collected1 + 1));
+            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         }
 
         // Even if there's no change, we still update the time
@@ -498,20 +498,18 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
 
+        DEBUGBAL(amount0Owed);
+        DEBUGBAL(amount1Owed);
+        DEBUGBAL(amt0FromThis);
+        DEBUGBAL(amt1FromThis);
+        DEBUGBAL(ERC20(token0).balanceOf(address(this)));
+        DEBUGBAL(ERC20(token1).balanceOf(address(this)));
         // Pay what this contract owes
         if (amt0FromThis > 0) {
-            if (sender == address(this)) {
-                TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
-            } else {
-                TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
-            }
+            TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
         }
         if (amt1FromThis > 0) {
-            if (sender == address(this)) {
-                TransferHelper.safeTransfer(token1, msg.sender, amount1Owed);
-            } else {
-                TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
-            }
+            TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
         }
 
         // Pay what the sender owes
