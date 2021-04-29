@@ -574,4 +574,38 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
         assertTrue(sqrtRedPriceX96 == 140737488355); //Value taken from uniswap sdk
     }
+
+    function testFail_try_minting_zero_liquidity() public {
+        uint256 wethAmount = 1 ether;
+        uint256 raiAmount = 10 ether;
+
+        u1.doApprove(address(testRai), address(manager), raiAmount);
+        u1.doApprove(address(testWeth), address(manager), wethAmount);
+
+        emit log_named_uint("depositing", 0);
+        u1.doDeposit(0);
+    }
+
+    function testFail_minting_largest_liquidity() public {
+        uint256 wethAmount = 1 ether;
+        uint256 raiAmount = 10 ether;
+
+        u1.doApprove(address(testRai), address(manager), raiAmount);
+        u1.doApprove(address(testWeth), address(manager), wethAmount);
+
+        emit log_named_uint("depositing", 0);
+        u1.doDeposit(uint128(0 - 1));
+    }
+
+    function testFail_burning_zero_liquidity() public {
+        helper_addLiquidity(3);
+
+        u3.doWithdraw(0);
+    }
+
+    function testFail_burning_more_than_owned_liquidity() public {
+        helper_addLiquidity(3);
+
+        u3.doWithdraw(uint128(0 - 1));
+    }
 }

@@ -311,9 +311,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
     }
 
-    event DEE(uint128 li);
-    event DAA(uint256 li);
-
     /**
      * @notice Add liquidity to this uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
@@ -352,8 +349,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             emit Rebalance(msg.sender, block.timestamp);
         }
 
-        emit DEE(newLiquidity + compoundLiquidity);
-        emit DEE(newLiquidity);
         // 3.Mint our new position on Uniswap
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
@@ -366,7 +361,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             mintAmount = uint256(newLiquidity).mul(_totalSupply).div(previousLiquidity);
         }
 
-        emit DAA(mintAmount);
         _mint(recipient, mintAmount);
 
         emit Deposit(msg.sender, recipient, newLiquidity);
@@ -388,6 +382,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 amount1Requested
     ) external returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
+        require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
@@ -433,8 +428,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         lastRebalance = block.timestamp;
         emit Rebalance(msg.sender, block.timestamp);
     }
-
-    event DEBUG(uint160 val);
 
     // --- Uniswap Related Functions ---
     /**
@@ -487,8 +480,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         position.uniLiquidity = _liquidity;
     }
 
-    event DEBUGBAL(uint256 b);
-
     /**
      * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
@@ -504,12 +495,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
 
-        DEBUGBAL(amount0Owed);
-        DEBUGBAL(amount1Owed);
-        DEBUGBAL(amt0FromThis);
-        DEBUGBAL(amt1FromThis);
-        DEBUGBAL(ERC20(token0).balanceOf(address(this)));
-        DEBUGBAL(ERC20(token1).balanceOf(address(this)));
         // Pay what this contract owes
         if (amt0FromThis > 0) {
             TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
