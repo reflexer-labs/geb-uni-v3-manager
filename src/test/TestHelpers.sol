@@ -43,6 +43,14 @@ contract PoolUser {
         weth = _w;
     }
 
+    function doTransfer(
+        address token,
+        address to,
+        uint256 amount
+    ) public {
+        ERC20(token).transfer(to, amount);
+    }
+
     function doDeposit(uint128 liquidityAmount) public {
         manager.deposit(liquidityAmount, address(this));
     }
