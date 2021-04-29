@@ -305,8 +305,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         );
     }
 
-    event DEPO(uint256 c);
-    event DEPOL(uint128 c);
+    event DEE(uint128 li);
+    event DAA(uint256 li);
 
     /**
      * @notice Add liquidity to this uniswap pool manager
@@ -340,12 +340,14 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 TickMath.getSqrtRatioAtTick(_nextLowerTick),
                 TickMath.getSqrtRatioAtTick(_nextUpperTick),
                 collected0,
-                collected1 + 1
+                collected1
             );
 
             emit Rebalance(msg.sender, block.timestamp);
         }
 
+        emit DEE(newLiquidity + compoundLiquidity);
+        emit DEE(newLiquidity);
         // 3.Mint our new position on Uniswap
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
@@ -358,6 +360,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             mintAmount = uint256(newLiquidity).mul(_totalSupply).div(previousLiquidity);
         }
 
+        emit DAA(mintAmount);
         _mint(recipient, mintAmount);
 
         emit Deposit(msg.sender, recipient, newLiquidity);
@@ -397,9 +400,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         // Read all this from storage to minimize SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         (uint160 sqr6, , , , , , ) = pool.slot0();
-        emit DEBUG(sqr6);
-        emit DEBUG(TickMath.getSqrtRatioAtTick(_currentLowerTick));
-        emit DEBUG(TickMath.getSqrtRatioAtTick(_currentUpperTick));
 
         (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
 
@@ -453,8 +453,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         position.uniLiquidity = _liquidity;
     }
 
-    event DECOLL(uint256 v);
-
     /**
      * @notice Helper function to burn a position
      * @param lowerTick The lower bound of the range to deposit the liquidity to
@@ -474,12 +472,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     ) private returns (uint256 collected0, uint256 collected1) {
         // Amount owed migth be more than requested. What do we do?
         (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
-        emit DECOLL(_owed0);
-        emit DECOLL(_owed1);
+
         // Collect all owed
         (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
-        emit DECOLL(collected0);
-        emit DECOLL(collected1);
+
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
         position.uniLiquidity = _liquidity;
@@ -501,9 +497,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(msg.sender == address(pool));
 
         (address sender, uint256 amt0FromThis, uint256 amt1FromThis) = abi.decode(data, (address, uint256, uint256));
-
-        emit DEBUGBAL(ERC20(token0).balanceOf(address(this)));
-        emit DEBUGBAL(ERC20(token1).balanceOf(address(this)));
 
         // Pay what this contract owes
         if (amt0FromThis > 0) {
@@ -528,8 +521,5 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         if (amount1Owed > amt1FromThis) {
             TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
         }
-
-        emit DEBUGBAL(ERC20(token0).balanceOf(address(this)));
-        emit DEBUGBAL(ERC20(token1).balanceOf(address(this)));
     }
 }
