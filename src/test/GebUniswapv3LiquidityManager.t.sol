@@ -473,6 +473,20 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(bal1w > bal0w);
     }
 
+    function test_multiple_users_depositing() public {
+        helper_addLiquidity(1); //Starting with a bit of liquidity
+        uint256 u1_balance = manager.balanceOf(address(u1));
+        assert(u1_balance == manager.totalSupply());
+        
+        helper_addLiquidity(2); //Starting with a bit of liquidity
+        uint256 u2_balance = manager.balanceOf(address(u2));
+        assert(u1_balance + u2_balance == manager.totalSupply());
+
+        helper_addLiquidity(3); //Starting with a bit of liquidity
+        uint256 u3_balance = manager.balanceOf(address(u3));
+        assert(u1_balance + u2_balance + u3_balance == manager.totalSupply());
+    }
+
     function test_multiple_users_adding_liquidity() public {
         uint256 u1_raiAmount = 5 ether;
         uint256 u1_wethAmount = 2 ether;
