@@ -125,12 +125,11 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         int24 low = -887270;
         int24 upp = 887270;
-        pool.mint(address(u4), low, upp, liq, bytes(""));
-        bytes32 id = keccak256(abi.encodePacked(address(this), low, upp));
-        (uint128 _liquidity, , , , ) = pool.positions(id);
+        pool.mint(address(this), low, upp, liq, bytes(""));
+        // bytes32 id = keccak256(abi.encodePacked(address(this), low, upp));
+        // (uint128 _liquidity, , , , ) = pool.positions(id);
 
-        // emit log_named_uint("KKKKKKKKKKKKKK", 44444444444);
-        // (uint256 am0, uint256 am1) = pool.burn(low, upp, _liquidity);
+        // (uint256 am0, uint256 am1) = pool.burn(low, upp, liq);
         // emit log_named_uint("am0", am0);
         // emit log_named_uint("am1", am1);
     }
@@ -138,7 +137,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     function helper_addLiquidity(uint8 user) public {
         (bytes32 i_id, , , uint128 i_uniLiquidity) = manager.position();
         (uint128 i_liquidity, , , , ) = pool.positions(i_id);
-        PoolUser u = users[user % 4];
+        PoolUser u = users[(user - 1) % 4];
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
 
@@ -150,12 +149,12 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, wethAmount, raiAmount);
         u.doDeposit(liq);
-        (bytes32 e_id, , , uint128 e_uniLiquidity) = manager.position();
-        (uint128 e_liquidity, , , , ) = pool.positions(e_id);
-        emit log_named_uint("i_uniLiquidity", i_uniLiquidity);
-        emit log_named_uint("i_liquidity", i_liquidity);
-        emit log_named_uint("e_uniLiquidity", e_uniLiquidity);
-        emit log_named_uint("e_liquidity", e_liquidity);
+        // (bytes32 e_id, , , uint128 e_uniLiquidity) = manager.position();
+        // (uint128 e_liquidity, , , , ) = pool.positions(e_id);
+        // emit log_named_uint("i_uniLiquidity", i_uniLiquidity);
+        // emit log_named_uint("i_liquidity", i_liquidity);
+        // emit log_named_uint("e_uniLiquidity", e_uniLiquidity);
+        // emit log_named_uint("e_liquidity", e_liquidity);
     }
 
     function helper_getLiquidityAmountsForTicks(
@@ -377,7 +376,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
 
         assertTrue(end_uniLiquidity <= init_uniLiquidity);
-        assertTrue(false);
+        // assertTrue(false);
     }
 
     function testFail_early_rebalancing() public {
@@ -397,6 +396,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint128 _li, , , , ) = pool.positions(inti_id);
 
         assertTrue(liq == _li);
+        emit log_named_uint("liq", liq);
         emit log_named_uint("liq", inti_uniLiquidity);
         emit log_named_uint("_li", _li);
 
