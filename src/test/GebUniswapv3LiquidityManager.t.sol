@@ -29,11 +29,14 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     PoolUser u4;
 
     PoolUser[4] public users;
+    PoolViewer pv;
 
     function setUp() public {
         // Deploy GEB
         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
         oracle = new OracleLikeMock();
+
+        pv = new PoolViewer();
 
         // Deploy each token
         testRai = new TestRAI("RAI");
@@ -328,6 +331,22 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(tkn0Amt == amount0);
     }
 
+    function test_get_token0_from_liquidity_burning() public {
+        helper_addLiquidity(1);
+        helper_addLiquidity(2);
+        uint128 liq = uint128(manager.balanceOf(address(u2)));
+
+        // uint256 tkn0Amt = manager.getToken0FromLiquidity(liq);
+        emit log_named_address("man", address(manager));
+        uint256 tkn0 = manager.getT0(address(pv), liq);
+
+        (uint256 amount0, ) = u2.doWithdraw(liq);
+
+        emit log_named_uint("tkn0Amt", tkn0);
+        emit log_named_uint("amount0", amount0);
+        assertTrue(tkn0 == amount0);
+    }
+
     function test_get_token1_from_liquidity() public {
         helper_addLiquidity(1);
         helper_addLiquidity(2);
@@ -346,7 +365,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint256 tkn0Amt = 1 ether;
         uint128 liq = manager.getLiquidityFromToken0(tkn0Amt);
         emit log_named_uint("liq", liq);
-        
+
         assertTrue(false);
     }
 
