@@ -289,8 +289,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function getToken0FromLiquidity(uint128 _liquidity) public returns (uint256 amount0) {
         (amount0, ) = getTokenAmtsFromLiquidity(_liquidity);
-        emit D(amount0);
-        return amount0;
     }
 
     /**
@@ -299,17 +297,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return amount1 The amount of token1 received for the liquidity
      */
     function getToken1FromLiquidity(uint128 _liquidity) public returns (uint256 amount1) {
-        uint256 poolLiquidity;
-        if (_liquidity == _totalSupply) {
-            poolLiquidity = _liquidity;
-        } else {
-            poolLiquidity = uint256(_liquidity).mul(position.uniLiquidity).div(_totalSupply);
-        }
-        amount1 = LiquidityAmounts.getAmount1ForLiquidity(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            uint128(poolLiquidity)
-        );
+        (,amount1) = getTokenAmtsFromLiquidity(_liquidity);
     }
 
     /**
