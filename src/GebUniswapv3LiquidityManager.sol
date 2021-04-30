@@ -43,6 +43,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     uint256 public delay;
     // The timestamp of the last rebalance
     uint256 public lastRebalance;
+    // The last used price for rebalance
+    int24 public lastRebalancePrice;
     // Collateral whose price to read from the oracle relayer
     bytes32 public collateralType;
     // This contracts' position in the Uniswap V3 pool
@@ -161,7 +163,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         oracle = oracle_;
 
         // Starting position
-        (int24 _lower, int24 _upper) = getNextTicks();
+        (int24 _lower, int24 _upper, ) = getNextTicks();
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
 
@@ -193,6 +195,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
             require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+            require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
             threshold = data;
         } else if (parameter == "delay") {
             require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
@@ -230,7 +233,14 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return _nextLower The lower bound of the range
      * @return _nextUpper The upper bound of the range
      */
-    function getNextTicks() public returns (int24 _nextLower, int24 _nextUpper) {
+    function getNextTicks()
+        public
+        returns (
+            int24 _nextLower,
+            int24 _nextUpper,
+            int24 spacedTick
+        )
+    {
         // 1. Get prices from the oracle relayer
         (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
 
@@ -324,16 +334,22 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
 
-        (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
+        //Ugly, but avoid stack too deep error
+        (int24 _nextLowerTick, int24 _nextUpperTick) = (0, 0);
+        {
+            int24 price = 0;
+            (_nextLowerTick, _nextUpperTick, price) = getNextTicks();
+            lastRebalancePrice = price;
+        }
 
         uint128 compoundLiquidity = 0;
         uint256 collected0 = 0;
         uint256 collected1 = 0;
 
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (position.uniLiquidity > 0 || (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
-            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
+            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, previousLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
             // 2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -350,18 +366,21 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         }
 
         // 3.Mint our new position on Uniswap
+        require(newLiquidity + compoundLiquidity >= newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
 
         // 4.Calculate and mint a user's ERC20 liquidity tokens
-        uint256 __supply = _totalSupply;
-        if (__supply == 0) {
-            mintAmount = newLiquidity;
-        } else {
-            mintAmount = uint256(newLiquidity).mul(_totalSupply).div(previousLiquidity);
-        }
+        {
+            uint256 __supply = _totalSupply;
+            if (__supply == 0) {
+                mintAmount = newLiquidity;
+            } else {
+                mintAmount = uint256(newLiquidity).mul(_totalSupply).div(previousLiquidity);
+            }
 
-        _mint(recipient, mintAmount);
+            _mint(recipient, mintAmount);
+        }
 
         emit Deposit(msg.sender, recipient, newLiquidity);
     }
@@ -402,7 +421,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         (uint160 sqr6, , , , , , ) = pool.slot0();
 
-        (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
+        (int24 _nextLowerTick, int24 _nextUpperTick, int24 price) = getNextTicks();
+        lastRebalancePrice = price;
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
             // Get the fees
