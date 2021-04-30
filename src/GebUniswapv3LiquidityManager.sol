@@ -194,11 +194,15 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
+<<<<<<< HEAD
             require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+=======
+            require(data > MIN_THRESHOLD && data < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+>>>>>>> implemented super hacky solution
             require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
             threshold = data;
         } else if (parameter == "delay") {
-            require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
+            require(data >= MIN_DELAY && data <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
             delay = data;
         } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
         emit ModifyParameters(parameter, data);
@@ -211,6 +215,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
+            //If it's an ivalid addres, this tx will revert
+            (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
             oracle = OracleLike(data);
         }
         emit ModifyParameters(parameter, data);
@@ -263,27 +269,42 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         _nextUpper = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
     }
 
+    event DB(bytes32 s);
+
+    function getTokenAmtsFromLiquidity(uint256 liq) internal returns (uint256 amount0, uint256 amount1) {
+        (, bytes memory res) = address(this).delegatecall(abi.encodeWithSignature("withdrawView(uint256)", liq));
+        emit BB(res);
+        (uint256 am0, uint256 am1) = abi.decode(res, (uint256, uint256));
+        amount0 = am0;
+        amount1 = am1;
+        emit D(amount0);
+    }
+
+    event D(uint256 jjj);
+
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param liquidity The amount of liquidity to withdraw
-     * @return amount0 The amount of token1 received for the liquidity
+     * @param _liquidity The amount of liquidity to withdraw
+     * @return amount0 The amount of token0 received for the liquidity
      */
-    function getToken0FromLiquidity(uint128 liquidity) public view returns (uint256 amount0) {
-        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
-        amount0 = LiquidityAmounts.getAmount0ForLiquidity(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            uint128(poolLiquidity)
-        );
+    function getToken0FromLiquidity(uint128 _liquidity) public returns (uint256 amount0) {
+        (amount0, ) = getTokenAmtsFromLiquidity(_liquidity);
+        emit D(amount0);
+        return amount0;
     }
 
     /**
      * @notice Returns the current amount of token1 for a given liquidity amount
-     * @param liquidity The amount of liquidity to withdraw
+     * @param _liquidity The amount of liquidity to withdraw
      * @return amount1 The amount of token1 received for the liquidity
      */
-    function getToken1FromLiquidity(uint128 liquidity) public view returns (uint256 amount1) {
-        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
+    function getToken1FromLiquidity(uint128 _liquidity) public returns (uint256 amount1) {
+        uint256 poolLiquidity;
+        if (_liquidity == _totalSupply) {
+            poolLiquidity = _liquidity;
+        } else {
+            poolLiquidity = uint256(_liquidity).mul(position.uniLiquidity).div(_totalSupply);
+        }
         amount1 = LiquidityAmounts.getAmount1ForLiquidity(
             TickMath.getSqrtRatioAtTick(position.lowerTick),
             TickMath.getSqrtRatioAtTick(position.upperTick),
@@ -412,6 +433,24 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
+    event BB(bytes jaj);
+
+    function withdrawView(uint256 liquidityAmount) external {
+        uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(_totalSupply);
+        require(_liquidityBurned < uint256(0 - 1));
+
+        (uint256 amount0, uint256 amount1) =
+            _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), address(this), MAX_UINT128, MAX_UINT128);
+        bytes memory reason = abi.encode(amount0, amount1);
+        emit BB(reason);
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, amount0)
+            mstore(add(ptr, 32), amount1)
+            revert(ptr, 64)
+        }
+    }
+
     /**
      * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
@@ -488,7 +527,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         address recipient,
         uint128 amount0Requested,
         uint128 amount1Requested
-    ) private returns (uint256 collected0, uint256 collected1) {
+    ) internal returns (uint256 collected0, uint256 collected1) {
         // Amount owed migth be more than requested. What do we do?
         (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
 
