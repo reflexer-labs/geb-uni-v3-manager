@@ -1,6 +1,6 @@
 pragma solidity ^0.6.7;
 
-library PoolViewer {
+contract PoolViewer {
     // --- Mint  ---
     /**
      * @notice Helper function to simulate(non state-mutating) a mint action on a uniswap v3 pool
