@@ -1,6 +1,7 @@
 pragma solidity ^0.6.7;
 
 import { ERC20 } from "./erc20/ERC20.sol";
+import "./PoolViewer.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
@@ -291,13 +292,21 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (amount0, ) = getTokenAmtsFromLiquidity(_liquidity);
     }
 
+    function getT0(address pv, uint128 liquidityAmount) public returns (uint256 amount0) {
+        uint256 __supply = _totalSupply;
+        uint128 _liquidityBurned = uint128(uint256(liquidityAmount).mul(position.uniLiquidity).div(__supply));
+        bool succ;
+        (succ, amount0, ) = PoolViewer(pv).burn(address(pool), position.lowerTick, position.upperTick, _liquidityBurned);
+        require(succ, "not possible to mint");
+    }
+
     /**
      * @notice Returns the current amount of token1 for a given liquidity amount
      * @param _liquidity The amount of liquidity to withdraw
      * @return amount1 The amount of token1 received for the liquidity
      */
     function getToken1FromLiquidity(uint128 _liquidity) public returns (uint256 amount1) {
-        (,amount1) = getTokenAmtsFromLiquidity(_liquidity);
+        (, amount1) = getTokenAmtsFromLiquidity(_liquidity);
     }
 
     /**
