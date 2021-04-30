@@ -192,7 +192,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param parameter The variable to change
      * @param data The value to set for the parameter
      */
-    function modifyParameters(bytes32 parameter, uint256 data) external {
+    function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
             require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
             require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
@@ -347,7 +347,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected1 = 0;
 
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (previousLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, previousLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
