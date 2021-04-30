@@ -260,16 +260,36 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(manager.threshold() == newThreshold);
     }
 
+    function testFail_invalid_threshold_tickspacing() public {
+        uint256 newThreshold = 400002;
+        manager.modifyParameters(bytes32("threshold"), newThreshold);
+    }
+
+    function testFail_invalid_threshold() public {
+        uint256 newThreshold = 20;
+        manager.modifyParameters(bytes32("threshold"), newThreshold);
+    }
+
     function test_modify_delay() public {
         uint256 newDelay = 340 minutes;
         manager.modifyParameters(bytes32("delay"), newDelay);
         assertTrue(manager.delay() == newDelay);
     }
 
+    function testFail_invalid_delay() public {
+        uint256 newDelay = 20 days;
+        manager.modifyParameters(bytes32("delay"), newDelay);
+    }
+
     function test_modify_oracle() public {
-        address newOracle = address(0x4);
+        address newOracle = address(new OracleLikeMock());
         manager.modifyParameters(bytes32("oracle"), newOracle);
         assertTrue(address(manager.oracle()) == newOracle);
+    }
+
+    function testFail_modify_invalid_oracle() public {
+        address newOracle = address(0x4);
+        manager.modifyParameters(bytes32("oracle"), newOracle);
     }
 
     function testFail_thirdyParty_changingParameter() public {
@@ -280,6 +300,54 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     function testFail_thirdyParty_changingOracle() public {
         bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,address)", bytes32("oracle"), address(4));
         u1.doArbitrary(address(manager), data);
+    }
+
+    function test_get_prices() public {
+        (uint256 redemptionPrice, uint256 tokenPrice) = manager.getPrices();
+        assertTrue(redemptionPrice == 1200000000 ether);
+        assertTrue(tokenPrice == 300 ether);
+    }
+
+    function test_get_next_ticks() public {
+        (int24 _nextLowerTick, int24 _nextUpperTick) = manager.getNextTicks();
+        assertTrue(_nextLowerTick >= -887270 && _nextLowerTick <= 0);
+        assertTrue(_nextUpperTick >= _nextLowerTick && _nextUpperTick <= 0);
+    }
+
+    function test_get_token0_from_liquidity() public {
+        helper_addLiquidity(1);
+        helper_addLiquidity(2);
+        uint128 liq = uint128(manager.balanceOf(address(u2)));
+
+        uint256 tkn0Amt = manager.getToken0FromLiquidity(liq);
+
+        (uint256 amount0, ) = u2.doWithdraw(liq);
+
+        emit log_named_uint("tkn0Amt", tkn0Amt);
+        emit log_named_uint("amount0", amount0);
+        assertTrue(tkn0Amt == amount0);
+    }
+
+    function test_get_token1_from_liquidity() public {
+        helper_addLiquidity(1);
+        helper_addLiquidity(2);
+        uint128 liq = uint128(manager.balanceOf(address(u2)));
+
+        uint256 tkn1Amt = manager.getToken1FromLiquidity(liq);
+
+        (, uint256 amount1) = u2.doWithdraw(liq);
+
+        emit log_named_uint("tkn1Amt", tkn1Amt);
+        emit log_named_uint("amount1", amount1);
+        assertTrue(tkn1Amt == amount1);
+    }
+
+    function test_get_liquidity_from_token0() public {
+        uint256 tkn0Amt = 1 ether;
+        uint128 liq = manager.getLiquidityFromToken0(tkn0Amt);
+        emit log_named_uint("liq", liq);
+        
+        assertTrue(false);
     }
 
     function test_adding_liquidity() public {
