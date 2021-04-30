@@ -1,6 +1,6 @@
 pragma solidity ^0.6.7;
 
-import "ds-test/test.sol";
+import "../../lib/ds-test/src/test.sol";
 import "../GebUniswapv3LiquidityManager.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";

@@ -1,0 +1,11 @@
+seqLen: 100
+testLimit: 2000
+# checkAsserts: true
+# sender: ["0x10000", "0x20000", "0xabc00"]
+# coverage: false
+# maxTimeDelay: 725760000 # 1200 weeks
+# maxBlockDelay: 60480000 # around 1000 weeks of blocks
+codeSize: 0x60000000000000000
+testMaxGas: 12500000000000 # current block gas limit
+estimateGas: false
+# shrinkLimit: 50000

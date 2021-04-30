@@ -1,6 +1,6 @@
 pragma solidity ^0.6.7;
 
-import "ds-test/test.sol";
+import "../../lib/ds-test/src/test.sol";
 import "../GebUniswapv3LiquidityManager.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
@@ -41,10 +41,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (token0, token1) = address(testRai) < address(testWeth) ? (address(testRai), address(testWeth)) : (address(testWeth), address(testRai));
 
         // Deploy Pool
-        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
-
-        // We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
-        // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
+        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500, initialPoolPrice));
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
 
         //Will initialize the pool with current price
@@ -293,13 +290,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u1.doApprove(address(testWeth), address(manager), wethAmount);
 
         (uint160 price1, , , , , , ) = pool.slot0();
-        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
         emit log_named_uint("liq", liq);
 
         {
-            (int24 _nlower, int24 _nupper) = manager.getNextTicks();
+            (int24 _nlower, int24 _nupper, ) = manager.getNextTicks();
 
             (uint160 currPrice, , , , , , ) = pool.slot0();
             (uint256 amount0, ) =
@@ -552,7 +549,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testRai), address(manager), u2_raiAmount);
         u2.doApprove(address(testWeth), address(manager), u2_wethAmount);
 
-        (int24 u2_lowerTick, int24 u2_upperTick) = manager.getNextTicks();
+        (int24 u2_lowerTick, int24 u2_upperTick, ) = manager.getNextTicks();
         (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, u2_lowerTick, u2_upperTick, u2_wethAmount, u2_raiAmount);
 
