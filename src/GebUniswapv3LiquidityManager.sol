@@ -259,10 +259,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return amount0 The amount of token1 received for the liquidity
      */
     function getToken0FromLiquidity(uint128 liquidity) public view returns (uint256 amount0) {
+        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
         amount0 = LiquidityAmounts.getAmount0ForLiquidity(
             TickMath.getSqrtRatioAtTick(position.lowerTick),
             TickMath.getSqrtRatioAtTick(position.upperTick),
-            liquidity
+            uint128(poolLiquidity)
         );
     }
 
@@ -272,10 +273,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return amount1 The amount of token1 received for the liquidity
      */
     function getToken1FromLiquidity(uint128 liquidity) public view returns (uint256 amount1) {
+        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
         amount1 = LiquidityAmounts.getAmount1ForLiquidity(
             TickMath.getSqrtRatioAtTick(position.lowerTick),
             TickMath.getSqrtRatioAtTick(position.upperTick),
-            liquidity
+            uint128(poolLiquidity)
         );
     }
 
@@ -285,11 +287,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return liquidity The amount received
      */
     function getLiquidityFromToken0(uint256 token0Amount) public view returns (uint128 liquidity) {
-        liquidity = LiquidityAmounts.getLiquidityForAmount0(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            token0Amount
-        );
+        uint128 liq =
+            LiquidityAmounts.getLiquidityForAmount0(
+                TickMath.getSqrtRatioAtTick(position.lowerTick),
+                TickMath.getSqrtRatioAtTick(position.upperTick),
+                token0Amount
+            );
+        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
     }
 
     /**
@@ -298,11 +302,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return liquidity The amount received
      */
     function getLiquidityFromToken1(uint256 token1Amount) public view returns (uint128 liquidity) {
-        liquidity = LiquidityAmounts.getLiquidityForAmount1(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            token1Amount
-        );
+        uint128 liq =
+            LiquidityAmounts.getLiquidityForAmount1(
+                TickMath.getSqrtRatioAtTick(position.lowerTick),
+                TickMath.getSqrtRatioAtTick(position.upperTick),
+                token1Amount
+            );
+        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
     }
 
     /**
@@ -325,7 +331,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 collected1 = 0;
 
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (position.uniLiquidity > 0 && (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (position.uniLiquidity > 0 || (position.lowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
 
@@ -336,9 +342,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                 sqrtRatioX96,
                 TickMath.getSqrtRatioAtTick(_nextLowerTick),
                 TickMath.getSqrtRatioAtTick(_nextUpperTick),
-                collected0,
-                collected1
+                collected0 + 1,
+                collected1 + 1
             );
+
             emit Rebalance(msg.sender, block.timestamp);
         }
 
@@ -375,10 +382,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 amount1Requested
     ) external returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
+        require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
-        uint256 _liquidityBurned = liquidityAmount.mul(__supply).div(position.uniLiquidity);
+        uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
         require(_liquidityBurned < uint256(0 - 1));
 
         (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient, amount0Requested, amount1Requested);
@@ -392,6 +400,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
         // Read all this from storage to minimize SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
+        (uint160 sqr6, , , , , , ) = pool.slot0();
 
         (int24 _nextLowerTick, int24 _nextUpperTick) = getNextTicks();
 
@@ -408,11 +417,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
                     sqrtRatioX96,
                     TickMath.getSqrtRatioAtTick(_nextLowerTick),
                     TickMath.getSqrtRatioAtTick(_nextUpperTick),
-                    collected0,
-                    collected1
+                    collected0 + 1,
+                    collected1 + 1
                 );
 
-            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(address(this), collected0, collected1));
+            _mintOnUniswap(_nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         }
 
         // Even if there's no change, we still update the time
@@ -488,18 +497,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         // Pay what this contract owes
         if (amt0FromThis > 0) {
-            if (sender == address(this)) {
-                TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
-            } else {
-                TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
-            }
+            TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
         }
         if (amt1FromThis > 0) {
-            if (sender == address(this)) {
-                TransferHelper.safeTransfer(token1, msg.sender, amount1Owed);
-            } else {
-                TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
-            }
+            TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
         }
 
         // Pay what the sender owes
