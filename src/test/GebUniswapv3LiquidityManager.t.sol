@@ -361,11 +361,11 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("amount1", amount1); // 0
 
         // --- Trying to do the reverse path ---
-        uint128 liqFrom0 = manager.getLiquidityFromToken0(amount0); //Function copied from uniswap library
-        uint128 liqFrom1 = manager.getLiquidityFromToken1(amount1); //Function copied from uniswap library
+        // uint128 liqFrom0 = manager.getLiquidityFromToken0(amount0); //Function copied from uniswap library
+        // uint128 liqFrom1 = manager.getLiquidityFromToken1(amount1); //Function copied from uniswap library
 
-        emit log_named_uint("liqFrom0", liqFrom0); // 162 -- Very far from 21316282116, the original liquidity users had
-        emit log_named_uint("liqFrom1", liqFrom1); // 0
+        // emit log_named_uint("liqFrom0", liqFrom0); // 162 -- Very far from 21316282116, the original liquidity users had
+        // emit log_named_uint("liqFrom1", liqFrom1); // 0
 
         // We need some pool info
         (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();

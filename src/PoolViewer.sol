@@ -21,20 +21,14 @@ contract PoolViewer {
     ) external {
         (bool success, bytes memory ret) =
             pool.call(abi.encodeWithSignature("mint(address,int24,int24,uint128,bytes)", recipient, tickLower, tickUpper, amount, data));
-        uint256 succ;
         (uint256 amount0, uint256 amount1) = (0, 0);
-        if (success) {
-            succ = 1;
-            (amount0, amount1) = abi.decode(ret, (uint256, uint256));
-        } else {
-            succ = 0;
-        }
+        if (success) (amount0, amount1) = abi.decode(ret, (uint256, uint256));
+
         assembly {
             let ptr := mload(0x40)
-            mstore(ptr, succ)
-            mstore(add(ptr, 32), amount0)
-            mstore(add(ptr, 64), amount1)
-            revert(ptr, 96)
+            mstore(ptr, amount0)
+            mstore(add(ptr, 32), amount1)
+            revert(ptr, 64)
         }
     }
 
@@ -60,20 +54,13 @@ contract PoolViewer {
             pool.call(
                 abi.encodeWithSignature("collect(address,int24,int24,uint128,uint128)", recipient, tickLower, tickUpper, amount0Requested, amount1Requested)
             );
-        uint256 succ;
         (uint128 amount0, uint128 amount1) = (0, 0);
-        if (success) {
-            succ = 1;
-            (amount0, amount1) = abi.decode(ret, (uint128, uint128));
-        } else {
-            succ = 0;
-        }
+        if (success) (amount0, amount1) = abi.decode(ret, (uint128, uint128));
         assembly {
             let ptr := mload(0x40)
-            mstore(ptr, succ)
-            mstore(add(ptr, 32), amount0)
-            mstore(add(ptr, 64), amount1)
-            revert(ptr, 96)
+            mstore(ptr, amount0)
+            mstore(add(ptr, 32), amount1)
+            revert(ptr, 64)
         }
     }
 
@@ -92,20 +79,13 @@ contract PoolViewer {
         uint128 amount
     ) external {
         (bool success, bytes memory ret) = pool.call(abi.encodeWithSignature("burn(int24,int24,uint128)", tickLower, tickUpper, amount));
-        uint256 succ;
         (uint256 amount0, uint256 amount1) = (0, 0);
-        if (success) {
-            succ = 1;
-            (amount0, amount1) = abi.decode(ret, (uint256, uint256));
-        } else {
-            succ = 0;
-        }
+        if (success) (amount0, amount1) = abi.decode(ret, (uint256, uint256));
         assembly {
             let ptr := mload(0x40)
-            mstore(ptr, succ)
-            mstore(add(ptr, 32), amount0)
-            mstore(add(ptr, 64), amount1)
-            revert(ptr, 96)
+            mstore(ptr, amount0)
+            mstore(add(ptr, 32), amount1)
+            revert(ptr, 64)
         }
     }
 }
