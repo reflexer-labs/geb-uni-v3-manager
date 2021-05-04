@@ -46,7 +46,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
 
-        // We have to give an inital price to the wethUsd // This meas 10:1(10 RAI for 1 ETH).
+        // We have to give an inital price to WETH 
+        // This meas 10:1 (10 RAI for 1 ETH)
         // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
 
@@ -350,7 +351,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_example() public {
-        // --- User 1 deposit in pool ---
+        // --- User 1 deposits in pool ---
         helper_addLiquidity(1);
         uint256 balance_u1 = manager.balanceOf(address(u1));
         emit log_named_uint("balance_u1", balance_u1); // 21316282116
@@ -422,9 +423,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_rebalancing_pool() public {
-        helper_addLiquidity(1); //Starting with a bit of liquidity
-        helper_addLiquidity(2); //Starting with a bit of liquidity
-        helper_addLiquidity(3); //Starting with a bit of liquidity
+        // Start with little liquidity
+        helper_addLiquidity(1); 
+        helper_addLiquidity(2);
+        helper_addLiquidity(3);
 
         testRai.approve(address(manager), 10);
         testWeth.approve(address(manager), 10);
@@ -445,7 +447,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         } else {
             emit log_named_uint("neg init_upperTick", helper_getAbsInt24(init_upperTick));
         }
-        hevm.warp(2 days); //Advance to the future
+        hevm.warp(2 days); // Advance to the future
 
         helper_changeRedemptionPrice(1400000000 ether); //Making RAI a bit more expensive
 
@@ -501,7 +503,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("liq", inti_uniLiquidity);
         emit log_named_uint("_li", _li);
 
-        //withdraw half of liquidity
+        // Withdraw half of the liquidity
         (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
         emit log_named_uint("bal0", liq / 2);
         emit log_named_uint("bal1", manager.balanceOf(address(u1)));
@@ -520,10 +522,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
     function test_collecting_fees() public {
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
-        emit log_named_uint("redemptionPrice", redemptionPrice);
-        emit log_named_uint("ethUsdPrice", ethUsdPrice);
-        //          redemptionPrice: 1000000000000000000000000000
-        //   ethUsdPrice: 300000000000000000000
+        emit log_named_uint("redemptionPrice", redemptionPrice); // redemptionPrice: 1000000000000000000000000000
+        emit log_named_uint("ethUsdPrice", ethUsdPrice); // ethUsdPrice: 300000000000000000000
 
         (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
         emit log_named_uint("price1", price0);
@@ -601,13 +601,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         testWeth.approve(address(manager), 10);
         helper_addLiquidity(1);
 
-        //Make Rai twice more Expensive
+        // Make RAI twice more expensive
         helper_changeRedemptionPrice(2000000000 ether);
 
-        //Add a send liquidity
+        // Add some liquidity
         helper_addLiquidity(1);
 
-        //Return to it's otiginal price
+        // Return to the original price
         helper_changeRedemptionPrice(1200000000 ether);
         hevm.warp(2 days);
 
@@ -618,7 +618,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("_liquidity", _liquidity);
         emit log_named_uint("liq", uniLiquidity1);
         emit log_named_uint("bal", manager.balanceOf(address(u1)));
-        //user should be able to withdraw it's whole balance. Balance != Liquidity
+        // user should be able to withdraw it's whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
     }
 
@@ -638,15 +638,15 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         // totalSupply should be equal both liquidities
         assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
-        //Getting new pool information
+        // Getting new pool information
         (, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
         assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
 
-        //Pool position shouldn't have changed
+        // Pool position shouldn't have changed
         assertTrue(lowerTick == lowerTick2);
         assertTrue(upperTick == upperTick2);
 
-        //Makind redemption price change
+        // Make the redemption price change
         helper_changeRedemptionPrice(800000000 ether);
 
         uint256 u2_raiAmount = 5 ether;
@@ -675,7 +675,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
 
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
-        assertTrue(sqrtRedPriceX96 == 140737488355); //Value taken from uniswap sdk
+        assertTrue(sqrtRedPriceX96 == 140737488355); // Value taken from uniswap sdk
     }
 
     function testFail_try_minting_zero_liquidity() public {
