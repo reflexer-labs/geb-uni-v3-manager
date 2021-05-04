@@ -1,6 +1,7 @@
 pragma solidity ^0.6.7;
 
 import { ERC20 } from "./erc20/ERC20.sol";
+import "./PoolViewer.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
@@ -55,6 +56,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     IUniswapV3Pool public pool;
     // Address of oracle relayer to get prices from
     OracleLike public oracle;
+    // Address of contract that allows simulating pool fuctions
+    PoolViewer public poolViewer;
 
     // --- Constants ---
     // Used to get the max amount of tokens per liquidity burned
@@ -136,7 +139,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 delay_,
         address pool_,
         bytes32 collateralType_,
-        OracleLike oracle_
+        OracleLike oracle_,
+        PoolViewer poolViewer_
     ) public ERC20(name_, symbol_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
@@ -161,6 +165,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         collateralType = collateralType_;
         oracle = oracle_;
+        poolViewer = poolViewer_;
 
         // Starting position
         (int24 _lower, int24 _upper, ) = getNextTicks();
@@ -194,11 +199,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
-            require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+            require(data > MIN_THRESHOLD && data < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
             require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
             threshold = data;
         } else if (parameter == "delay") {
-            require(delay >= MIN_DELAY && delay <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
+            require(data >= MIN_DELAY && data <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
             delay = data;
         } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
         emit ModifyParameters(parameter, data);
@@ -211,6 +216,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
+            //If it's an ivalid addres, this tx will revert
+            (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
             oracle = OracleLike(data);
         }
         emit ModifyParameters(parameter, data);
@@ -256,7 +263,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
         // 4. Adjust to comply to tickSpacing
-        int24 spacedTick = targetTick - (targetTick % tickSpacing);
+        spacedTick = targetTick - (targetTick % tickSpacing);
 
         // 5. Find lower and upper bounds for the next position
         _nextLower = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
@@ -265,60 +272,38 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param liquidity The amount of liquidity to withdraw
-     * @return amount0 The amount of token1 received for the liquidity
+     * @param _liquidity The amount of liquidity to withdraw
+     * @return amount0 The amount of token0 received for the liquidity
+     * @return amount1 The amount of token0 received for the liquidity
      */
-    function getToken0FromLiquidity(uint128 liquidity) public view returns (uint256 amount0) {
-        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
-        amount0 = LiquidityAmounts.getAmount0ForLiquidity(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            uint128(poolLiquidity)
-        );
+    function getTokenAmountsFromLiquidity(uint128 _liquidity) public returns (uint256 amount0, uint256 amount1) {
+        uint256 __supply = _totalSupply;
+        uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(position.uniLiquidity).div(__supply));
+        (, bytes memory ret) =
+            address(poolViewer).delegatecall(
+                abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), position.lowerTick, position.upperTick, _liquidityBurned)
+            );
+        (amount0, amount1) = abi.decode(ret, (uint256, uint256));
+    }
+
+    /**
+     * @notice Returns the current amount of token0 for a given liquidity amount
+     * @param _liquidity The amount of liquidity to withdraw
+     * @return amount0 The amount of token0 received for the liquidity
+     */
+    function getToken0FromLiquidity(uint128 _liquidity) public returns (uint256 amount0) {
+        if (_liquidity == 0) return 0;
+        (amount0, ) = getTokenAmountsFromLiquidity(_liquidity);
     }
 
     /**
      * @notice Returns the current amount of token1 for a given liquidity amount
-     * @param liquidity The amount of liquidity to withdraw
+     * @param _liquidity The amount of liquidity to withdraw
      * @return amount1 The amount of token1 received for the liquidity
      */
-    function getToken1FromLiquidity(uint128 liquidity) public view returns (uint256 amount1) {
-        uint256 poolLiquidity = uint256(liquidity).mul(position.uniLiquidity).div(_totalSupply);
-        amount1 = LiquidityAmounts.getAmount1ForLiquidity(
-            TickMath.getSqrtRatioAtTick(position.lowerTick),
-            TickMath.getSqrtRatioAtTick(position.upperTick),
-            uint128(poolLiquidity)
-        );
-    }
-
-    /**
-     * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param token0Amount The amount of token0 to check
-     * @return liquidity The amount received
-     */
-    function getLiquidityFromToken0(uint256 token0Amount) public view returns (uint128 liquidity) {
-        uint128 liq =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(position.lowerTick),
-                TickMath.getSqrtRatioAtTick(position.upperTick),
-                token0Amount
-            );
-        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
-    }
-
-    /**
-     * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param token1Amount The amount of token0 to check
-     * @return liquidity The amount received
-     */
-    function getLiquidityFromToken1(uint256 token1Amount) public view returns (uint128 liquidity) {
-        uint128 liq =
-            LiquidityAmounts.getLiquidityForAmount1(
-                TickMath.getSqrtRatioAtTick(position.lowerTick),
-                TickMath.getSqrtRatioAtTick(position.upperTick),
-                token1Amount
-            );
-        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
+    function getToken1FromLiquidity(uint128 _liquidity) public returns (uint256 amount1) {
+        if (_liquidity == 0) return 0;
+        (, amount1) = getTokenAmountsFromLiquidity(_liquidity);
     }
 
     /**
@@ -349,7 +334,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         // A possible optimization is to only rebalance if the tick diff is significant enough
         if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
-            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, previousLiquidity, address(this), MAX_UINT128, MAX_UINT128);
+            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
             // 2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -389,17 +374,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @notice Remove liquidity and withdraw the underlying assets
      * @param liquidityAmount The amount of liquidity to withdraw
      * @param recipient The address that will receive token0 and token1 tokens
-     * @param amount0Requested Minimum amount of token0 requested
-     * @param amount1Requested Minimum amount of token1 requested
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(
-        uint256 liquidityAmount,
-        address recipient,
-        uint128 amount0Requested,
-        uint128 amount1Requested
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint256 liquidityAmount, address recipient) external returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
         uint256 __supply = _totalSupply;
@@ -408,7 +386,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
         require(_liquidityBurned < uint256(0 - 1));
 
-        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient, amount0Requested, amount1Requested);
+        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
@@ -426,8 +404,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
             // Get the fees
-            (uint256 collected0, uint256 collected1) =
-                _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
+            (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
             //Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -485,16 +462,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         int24 lowerTick,
         int24 upperTick,
         uint128 burnedLiquidity,
-        address recipient,
-        uint128 amount0Requested,
-        uint128 amount1Requested
-    ) private returns (uint256 collected0, uint256 collected1) {
+        address recipient
+    ) internal returns (uint256 collected0, uint256 collected1) {
         // Amount owed migth be more than requested. What do we do?
-        (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
-
+        pool.burn(lowerTick, upperTick, burnedLiquidity);
         // Collect all owed
-        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
-
+        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, MAX_UINT128, MAX_UINT128);
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
         position.uniLiquidity = _liquidity;

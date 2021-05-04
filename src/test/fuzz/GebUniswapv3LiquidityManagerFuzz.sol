@@ -37,7 +37,7 @@ contract Fuzzer {
 
     function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
         uint128 max_uint128 = uint128(0 - 1);
-        manager.withdraw(liquidityAmount, address(this), max_uint128, max_uint128);
+        manager.withdraw(liquidityAmount, address(this));
     }
 
     function user_Deposit(uint8 user, uint128 liq) public {
@@ -140,6 +140,8 @@ contract Fuzzer {
     PoolUser u3;
     PoolUser u4;
 
+    PoolViewer pv;
+
     function setUp() internal {
         oracle = new OracleLikeMock();
         // Deploy each token
@@ -147,8 +149,10 @@ contract Fuzzer {
         testWeth = new TestWETH("WETH");
         (token0, token1) = address(testRai) < address(testWeth) ? (address(testRai), address(testWeth)) : (address(testWeth), address(testRai));
         // Deploy Pool
+        pv = new PoolViewer();
+
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500, initialPoolPrice));
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle);
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
         u1 = new PoolUser(manager, pool, testRai, testWeth);
         u2 = new PoolUser(manager, pool, testRai, testWeth);
         u3 = new PoolUser(manager, pool, testRai, testWeth);

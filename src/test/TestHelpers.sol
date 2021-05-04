@@ -9,13 +9,13 @@ import "../erc20/ERC20.sol";
 // --- Token Contracts ---
 contract TestRAI is ERC20 {
     constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
-        _mint(msg.sender, 5000000 ether);
+        _mint(msg.sender, 12000000000000000 ether);
     }
 }
 
 contract TestWETH is ERC20 {
     constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
-        _mint(msg.sender, 1000000 ether);
+        _mint(msg.sender, 300000000 ether);
     }
 }
 
@@ -57,7 +57,7 @@ contract PoolUser {
 
     function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {
         uint128 max_uint128 = uint128(0 - 1);
-        (amount0, amount1) = manager.withdraw(liquidityAmount, address(this), max_uint128, max_uint128);
+        (amount0, amount1) = manager.withdraw(liquidityAmount, address(this));
     }
 
     function doApprove(
