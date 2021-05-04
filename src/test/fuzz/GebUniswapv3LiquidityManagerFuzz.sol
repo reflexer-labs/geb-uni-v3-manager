@@ -1,5 +1,5 @@
 pragma solidity ^0.6.7;
-
+pragma experimental ABIEncoderV2;
 import { ERC20 } from "../.././erc20/ERC20.sol";
 import { IUniswapV3Pool } from "../.././uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "../.././uni/interfaces/callback/IUniswapV3MintCallback.sol";
@@ -20,14 +20,15 @@ import "./uniswap/E2E_swap.sol";
 contract Fuzzer is E2E_swap {
     using SafeMath for uint256;
 
-    constructor() public {
-        setUp();
-    }
+    constructor() public {}
 
     // --- All Possible Actions ---
     function changeThreshold(uint256 val) public {
         //Requirement from uniswap
-        if (!inited) _init(uint128(val));
+        if (!inited) {
+            setUp();
+            _init(uint128(val));
+        }
         manager.modifyParameters(bytes32("threshold"), val);
     }
 
@@ -37,32 +38,51 @@ contract Fuzzer is E2E_swap {
     }
 
     function changeRedemptionPrice(uint256 newPrice) public {
-        if (!inited) _init(uint128(newPrice));
+        if (!inited) {
+            setUp();
+            _init(uint128(newPrice));
+        }
         oracle.setSystemCoinPrice(newPrice);
     }
 
     function changeCollateralPrice(uint256 newPrice) public {
-        if (!inited) _init(uint128(newPrice));
+        if (!inited) {
+            setUp();
+            _init(uint128(newPrice));
+        }
         oracle.setCollateralPrice(newPrice);
     }
 
     function depositForRecipient(address recipient, uint128 liquidityAmount) public {
+        if (!inited) {
+            setUp();
+            _init(liquidityAmount);
+        }
         if (!inited) _init(liquidityAmount);
         manager.deposit(liquidityAmount, address(this));
     }
 
     function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
-        if (!inited) _init(liquidityAmount);
+        if (!inited) {
+            setUp();
+            _init(liquidityAmount);
+        }
         manager.withdraw(liquidityAmount, address(this));
     }
 
     function user_Deposit(uint8 user, uint128 liq) public {
-        if (!inited) _init(liq);
+        if (!inited) {
+            setUp();
+            _init(liq);
+        }
         users[user % 4].doDeposit(liq);
     }
 
     function user_WithDraw(uint8 user, uint128 liq) public {
-        if (!inited) _init(liq);
+        if (!inited) {
+            setUp();
+            _init(liq);
+        }
         users[user % 4].doWithdraw(liq);
     }
 
@@ -73,7 +93,10 @@ contract Fuzzer is E2E_swap {
         int24 upperTick,
         uint128 liquidityAmount
     ) public {
-        if (!inited) _init(liquidityAmount);
+        if (!inited) {
+            setUp();
+            _init(liquidityAmount);
+        }
         users[user % 4].doMint(lowerTick, upperTick, liquidityAmount);
     }
 
@@ -83,7 +106,10 @@ contract Fuzzer is E2E_swap {
         int24 upperTick,
         uint128 liquidityAmount
     ) public {
-        if (!inited) _init(liquidityAmount);
+        if (!inited) {
+            setUp();
+            _init(liquidityAmount);
+        }
         users[user % 4].doBurn(lowerTick, upperTick, liquidityAmount);
     }
 
@@ -95,12 +121,18 @@ contract Fuzzer is E2E_swap {
         uint128 amount0Requested,
         uint128 amount1Requested
     ) public {
-        if (!inited) _init(amount0Requested);
+        if (!inited) {
+            setUp();
+            _init(amount0Requested);
+        }
         users[user % 4].doCollectFromPool(lowerTick, upperTick, recipient, amount0Requested, amount1Requested);
     }
 
     function user_Swap(uint8 user, int256 _amount) public {
-        if (!inited) _init(uint128(user));
+        if (!inited) {
+            setUp();
+            _init(uint128(user));
+        }
         require(token0.balanceOf(address(swapper)) > 0);
         int256 _amountSpecified = -int256(_amount);
 
@@ -162,7 +194,7 @@ contract Fuzzer is E2E_swap {
         oracle = new OracleLikeMock();
         pv = new PoolViewer();
 
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
+        // manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
 
         u1 = new FuzzUser(manager, token0, token1);
         u2 = new FuzzUser(manager, token0, token1);
@@ -179,7 +211,7 @@ contract Fuzzer is E2E_swap {
         users[2] = u3;
         users[3] = u4;
 
-        helper_transferToAdds(users);
+        // helper_transferToAdds(users);
     }
 
     function helper_transferToAdds(FuzzUser[4] memory adds) internal {
