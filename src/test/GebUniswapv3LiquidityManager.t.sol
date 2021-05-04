@@ -421,6 +421,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(liqReceived == liq);
     }
 
+    function testFail_adding_zero_liquidity() public {
+        u2.doDeposit(0);
+    }
+
     function test_rebalancing_pool() public {
         helper_addLiquidity(1); //Starting with a bit of liquidity
         helper_addLiquidity(2); //Starting with a bit of liquidity
@@ -487,7 +491,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         manager.rebalance(); // should fail
     }
 
-    function test_burning_liquidity() public {
+    function test_withdrawing_liquidity() public {
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
         helper_addLiquidity(1); //Starting with a bit of liquidity
@@ -516,6 +520,15 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("inti_uniLiquidity", inti_uniLiquidity / 2);
         emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
         assertTrue(end_uniLiquidity == inti_uniLiquidity / 2);
+    }
+
+    function testFail_withdrawing_zero_liq() public {
+        helper_addLiquidity(3); //Starting with a bit of liquidity
+        u3.doWithdraw(0);
+    }
+
+    function testFail_calling_uni_callback() public {
+        manager.uniswapV3MintCallback(0, 0, "");
     }
 
     function test_collecting_fees() public {
@@ -668,6 +681,38 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(u2_upperTick < upperTick2);
 
         // assertTrue(false);
+    }
+
+    function test_getNextTicks_return_correctly() public {
+        helper_addLiquidity(1); //Starting with a bit of liquidity
+        helper_addLiquidity(2); //Starting with a bit of liquidity
+        helper_addLiquidity(3); //Starting with a bit of liquidity
+
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+        hevm.warp(2 days); //Advance to the future
+
+        helper_changeRedemptionPrice(800000000 ether);
+        (int24 lower, int24 upper, int24 price) = manager.getNextTicks();
+
+        manager.rebalance();
+
+        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
+        assertTrue(lower == end_lowerTick);
+        assertTrue(upper == end_upperTick);
+    }
+
+    function test_getter_return_correct_amount() public {
+        helper_addLiquidity(1); //Starting with a bit of liquidity
+
+        uint256 balance_u1 = manager.balanceOf(address(u1));
+
+        (uint256 amount0, uint256 amount1) = manager.getTokenAmountsFromLiquidity(uint128(balance_u1));
+
+        (uint256 ac_amount0, uint256 ac_amount1) = u1.doWithdraw(uint128(balance_u1));
+
+        assertTrue(amount0 == ac_amount0);
+        assertTrue(amount1 == ac_amount1);
     }
 
     function test_sqrt_conversion() public {
