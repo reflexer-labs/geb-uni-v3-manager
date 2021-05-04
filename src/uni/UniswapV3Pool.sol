@@ -379,6 +379,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         emit Collect(msg.sender, recipient, tickLower, tickUpper, amount0, amount1);
     }
 
+    event PPPPPPPP(address dd);
+
     ///  IUniswapV3PoolActions
     /// @dev noDelegateCall is applied indirectly via _modifyPosition
     function burn(
@@ -386,17 +388,17 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         int24 tickUpper,
         uint128 amount
     ) external override lock returns (uint256 amount0, uint256 amount1) {
-        // (Position.Info storage position, int256 amount0Int, int256 amount1Int) =
-        //     _modifyPosition(
-        //         ModifyPositionParams({ owner: msg.sender, tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: -int256(amount).toInt128() })
-        //     );
+        (Position.Info storage position, int256 amount0Int, int256 amount1Int) =
+            _modifyPosition(
+                ModifyPositionParams({ owner: msg.sender, tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: -int256(amount).toInt128() })
+            );
 
-        // amount0 = uint256(-amount0Int);
-        // amount1 = uint256(-amount1Int);
+        amount0 = uint256(-amount0Int);
+        amount1 = uint256(-amount1Int);
 
-        // if (amount0 > 0 || amount1 > 0) {
-        //     (position.tokensOwed0, position.tokensOwed1) = (position.tokensOwed0 + uint128(amount0), position.tokensOwed1 + uint128(amount1));
-        // }
+        if (amount0 > 0 || amount1 > 0) {
+            (position.tokensOwed0, position.tokensOwed1) = (position.tokensOwed0 + uint128(amount0), position.tokensOwed1 + uint128(amount1));
+        }
 
         emit Burn(msg.sender, tickLower, tickUpper, amount, amount0, amount1);
     }
