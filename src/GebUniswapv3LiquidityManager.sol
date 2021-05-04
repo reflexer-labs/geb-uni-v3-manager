@@ -283,11 +283,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     function getTokenAmountsFromLiquidity(uint128 _liquidity) public returns (uint256 amount0, uint256 amount1) {
         uint256 __supply = _totalSupply;
         uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(position.uniLiquidity).div(__supply));
-        (, bytes memory ret) = address(poolViewer).delegatecall(abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), position.lowerTick, position.upperTick, _liquidityBurned));
-        uint256 result;
-        (result, amount0, amount1) = abi.decode(ret, (uint256, uint256, uint256));
-        // (succ, amount0, amount1) = poolViewer.burn(address(pool), position.lowerTick, position.upperTick, _liquidityBurned);
-
+        (, bytes memory ret) =
+            address(poolViewer).delegatecall(
+                abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), position.lowerTick, position.upperTick, _liquidityBurned)
+            );
+        (amount0, amount1) = abi.decode(ret, (uint256, uint256));
     }
 
     /**
