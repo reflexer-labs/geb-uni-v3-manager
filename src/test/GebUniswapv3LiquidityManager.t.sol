@@ -139,7 +139,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u.doApprove(address(testRai), address(manager), raiAmount);
         u.doApprove(address(testWeth), address(manager), wethAmount);
 
-        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, wethAmount, raiAmount);
@@ -301,7 +301,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_get_next_ticks() public {
-        (int24 _nextLowerTick, int24 _nextUpperTick) = manager.getNextTicks();
+        (int24 _nextLowerTick, int24 _nextUpperTick, ) = manager.getNextTicks();
         assertTrue(_nextLowerTick >= -887270 && _nextLowerTick <= 0);
         assertTrue(_nextUpperTick >= _nextLowerTick && _nextUpperTick <= 0);
     }
@@ -449,7 +449,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         helper_changeRedemptionPrice(1400000000 ether); //Making RAI a bit more expensive
 
-        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
         if (newLower > 0) {
             emit log_named_uint("pos newLower", helper_getAbsInt24(newLower));
         } else {
@@ -540,7 +540,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testWeth), address(manager), wethAmount);
 
         (uint160 price1, , , , , , ) = pool.slot0();
-        (int24 newLower, int24 newUpper) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
 
