@@ -93,11 +93,6 @@ contract E2E_swap {
     //
     //
 
-    function viewRandomInit(uint128 _seed) public view returns (PoolParams memory poolParams, PoolPositions memory poolPositions) {
-        poolParams = forgePoolParams(_seed);
-        poolPositions = forgePoolPositions(_seed, poolParams.tickSpacing, poolParams.tickCount, poolParams.maxTick);
-    }
-
     //
     //
     // Setup functions
