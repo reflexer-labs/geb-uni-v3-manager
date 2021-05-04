@@ -199,11 +199,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "threshold") {
-<<<<<<< HEAD
-            require(threshold > MIN_THRESHOLD && threshold < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
-=======
             require(data > MIN_THRESHOLD && data < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
->>>>>>> implemented super hacky solution
             require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
             threshold = data;
         } else if (parameter == "delay") {
@@ -267,7 +263,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         int24 targetTick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
         // 4. Adjust to comply to tickSpacing
-        int24 spacedTick = targetTick - (targetTick % tickSpacing);
+        spacedTick = targetTick - (targetTick % tickSpacing);
 
         // 5. Find lower and upper bounds for the next position
         _nextLower = spacedTick - int24(threshold) < MIN_TICK ? MIN_TICK : spacedTick - int24(threshold);
@@ -338,11 +334,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         // A possible optimization is to only rebalance if the tick diff is significant enough
         if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
-<<<<<<< HEAD
-            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, previousLiquidity, address(this), MAX_UINT128, MAX_UINT128);
-=======
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
->>>>>>> fixed getters and more tests
 
             // 2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
