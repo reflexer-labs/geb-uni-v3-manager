@@ -99,39 +99,39 @@ contract E2E_swap {
     //
     //
 
-    function forgePoolParams(uint128 _seed) internal view returns (PoolParams memory poolParams) {
+    function forgePoolParams(uint128 _seed) internal view returns (PoolParams memory poolParams_) {
         //
         // decide on one of the three fees, and corresponding tickSpacing
         //
         if (_seed % 3 == 0) {
-            poolParams.fee = uint24(500);
-            poolParams.tickSpacing = int24(10);
+            poolParams_.fee = uint24(500);
+            poolParams_.tickSpacing = int24(10);
         } else if (_seed % 3 == 1) {
-            poolParams.fee = uint24(3000);
-            poolParams.tickSpacing = int24(60);
+            poolParams_.fee = uint24(3000);
+            poolParams_.tickSpacing = int24(60);
         } else if (_seed % 3 == 2) {
-            poolParams.fee = uint24(10000);
-            poolParams.tickSpacing = int24(2000);
+            poolParams_.fee = uint24(10000);
+            poolParams_.tickSpacing = int24(2000);
         }
 
-        poolParams.maxTick = (int24(887272) / poolParams.tickSpacing) * poolParams.tickSpacing;
-        poolParams.minTick = -poolParams.maxTick;
-        poolParams.tickCount = uint24(poolParams.maxTick / poolParams.tickSpacing);
+        poolParams_.maxTick = (int24(887272) / poolParams_.tickSpacing) * poolParams_.tickSpacing;
+        poolParams_.minTick = -poolParams_.maxTick;
+        poolParams_.tickCount = uint24(poolParams_.maxTick / poolParams_.tickSpacing);
 
         //
         // set the initial price
         //
-        poolParams.startTick = int24((_seed % uint128(poolParams.tickCount)) * uint128(poolParams.tickSpacing));
+        poolParams_.startTick = int24((_seed % uint128(poolParams_.tickCount)) * uint128(poolParams_.tickSpacing));
         if (_seed % 3 == 0) {
             // set below 0
-            poolParams.startPrice = TickMath.getSqrtRatioAtTick(-poolParams.startTick);
+            poolParams_.startPrice = TickMath.getSqrtRatioAtTick(-poolParams_.startTick);
         } else if (_seed % 3 == 1) {
             // set at 0
-            poolParams.startPrice = TickMath.getSqrtRatioAtTick(0);
-            poolParams.startTick = 0;
+            poolParams_.startPrice = TickMath.getSqrtRatioAtTick(0);
+            poolParams_.startTick = 0;
         } else if (_seed % 3 == 2) {
             // set above 0
-            poolParams.startPrice = TickMath.getSqrtRatioAtTick(poolParams.startTick);
+            poolParams_.startPrice = TickMath.getSqrtRatioAtTick(poolParams_.startTick);
         }
     }
 
@@ -280,14 +280,12 @@ contract E2E_swap {
         minter.setPool(pool);
         swapper.setPool(pool);
 
-        //
-        // generate random positions
-        //
+        //generate random positions
+
         poolPositions = forgePoolPositions(_seed, poolParams.tickSpacing, poolParams.tickCount, poolParams.maxTick);
 
-        //
-        // create the positions
-        //
+        //create the positions
+
         for (uint8 i = 0; i < poolPositions.tickLowers.length; i++) {
             int24 tickLower = poolPositions.tickLowers[i];
             int24 tickUpper = poolPositions.tickUppers[i];
@@ -304,7 +302,6 @@ contract E2E_swap {
             if (!lowerAlreadyUsed) usedTicks.push(tickLower);
             if (!upperAlreadyUsed) usedTicks.push(tickUpper);
         }
-
         inited = true;
     }
 
