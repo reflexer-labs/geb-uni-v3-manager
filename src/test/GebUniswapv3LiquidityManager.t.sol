@@ -18,7 +18,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     address token0;
     address token1;
 
-    uint256 threshold = 400000; //40%
+    uint256 threshold = 360000; //36%
     uint256 delay = 120 minutes; //10 minutes
 
     uint160 initialPoolPrice;

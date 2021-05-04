@@ -306,6 +306,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         (, amount1) = getTokenAmountsFromLiquidity(_liquidity);
     }
 
+    event D(uint256 l);
+    event I(int24 q);
+
     /**
      * @notice Add liquidity to this uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
@@ -330,9 +333,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 compoundLiquidity = 0;
         uint256 collected0 = 0;
         uint256 collected1 = 0;
-
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (previousLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
