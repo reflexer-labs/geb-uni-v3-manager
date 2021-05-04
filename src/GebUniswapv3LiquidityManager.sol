@@ -56,6 +56,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     IUniswapV3Pool public pool;
     // Address of oracle relayer to get prices from
     OracleLike public oracle;
+    // Address of contract that allows simulating pool fuctions
+    PoolViewer public poolViewer;
 
     // --- Constants ---
     // Used to get the max amount of tokens per liquidity burned
@@ -137,7 +139,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 delay_,
         address pool_,
         bytes32 collateralType_,
-        OracleLike oracle_
+        OracleLike oracle_,
+        PoolViewer poolViewer_
     ) public ERC20(name_, symbol_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
@@ -162,6 +165,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         collateralType = collateralType_;
         oracle = oracle_;
+        poolViewer = poolViewer_;
 
         // Starting position
         (int24 _lower, int24 _upper, ) = getNextTicks();
@@ -270,18 +274,21 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         _nextUpper = spacedTick + int24(threshold) > MAX_TICK ? MAX_TICK : spacedTick + int24(threshold);
     }
 
-    event DB(bytes32 s);
+    /**
+     * @notice Returns the current amount of token0 for a given liquidity amount
+     * @param _liquidity The amount of liquidity to withdraw
+     * @return amount0 The amount of token0 received for the liquidity
+     * @return amount1 The amount of token0 received for the liquidity
+     */
+    function getTokenAmountsFromLiquidity(uint128 _liquidity) public returns (uint256 amount0, uint256 amount1) {
+        uint256 __supply = _totalSupply;
+        uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(position.uniLiquidity).div(__supply));
+        (, bytes memory ret) = address(poolViewer).delegatecall(abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), position.lowerTick, position.upperTick, _liquidityBurned));
+        uint256 result;
+        (result, amount0, amount1) = abi.decode(ret, (uint256, uint256, uint256));
+        // (succ, amount0, amount1) = poolViewer.burn(address(pool), position.lowerTick, position.upperTick, _liquidityBurned);
 
-    function getTokenAmtsFromLiquidity(uint256 liq) internal returns (uint256 amount0, uint256 amount1) {
-        (, bytes memory res) = address(this).delegatecall(abi.encodeWithSignature("withdrawView(uint256)", liq));
-        emit BB(res);
-        (uint256 am0, uint256 am1) = abi.decode(res, (uint256, uint256));
-        amount0 = am0;
-        amount1 = am1;
-        emit D(amount0);
     }
-
-    event D(uint256 jjj);
 
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
@@ -289,15 +296,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return amount0 The amount of token0 received for the liquidity
      */
     function getToken0FromLiquidity(uint128 _liquidity) public returns (uint256 amount0) {
-        (amount0, ) = getTokenAmtsFromLiquidity(_liquidity);
-    }
-
-    function getT0(address pv, uint128 liquidityAmount) public returns (uint256 amount0) {
-        uint256 __supply = _totalSupply;
-        uint128 _liquidityBurned = uint128(uint256(liquidityAmount).mul(position.uniLiquidity).div(__supply));
-        bool succ;
-        (succ, amount0, ) = PoolViewer(pv).burn(address(pool), position.lowerTick, position.upperTick, _liquidityBurned);
-        require(succ, "not possible to mint");
+        if (_liquidity == 0) return 0;
+        (amount0, ) = getTokenAmountsFromLiquidity(_liquidity);
     }
 
     /**
@@ -306,37 +306,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @return amount1 The amount of token1 received for the liquidity
      */
     function getToken1FromLiquidity(uint128 _liquidity) public returns (uint256 amount1) {
-        (, amount1) = getTokenAmtsFromLiquidity(_liquidity);
-    }
-
-    /**
-     * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param token0Amount The amount of token0 to check
-     * @return liquidity The amount received
-     */
-    function getLiquidityFromToken0(uint256 token0Amount) public view returns (uint128 liquidity) {
-        uint128 liq =
-            LiquidityAmounts.getLiquidityForAmount0(
-                TickMath.getSqrtRatioAtTick(position.lowerTick),
-                TickMath.getSqrtRatioAtTick(position.upperTick),
-                token0Amount
-            );
-        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
-    }
-
-    /**
-     * @notice Returns the current amount of token0 for a given liquidity amount
-     * @param token1Amount The amount of token0 to check
-     * @return liquidity The amount received
-     */
-    function getLiquidityFromToken1(uint256 token1Amount) public view returns (uint128 liquidity) {
-        uint128 liq =
-            LiquidityAmounts.getLiquidityForAmount1(
-                TickMath.getSqrtRatioAtTick(position.lowerTick),
-                TickMath.getSqrtRatioAtTick(position.upperTick),
-                token1Amount
-            );
-        liquidity = uint128(uint256(liq).mul(_totalSupply).div(position.uniLiquidity));
+        if (_liquidity == 0) return 0;
+        (, amount1) = getTokenAmountsFromLiquidity(_liquidity);
     }
 
     /**
@@ -367,7 +338,11 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         // A possible optimization is to only rebalance if the tick diff is significant enough
         if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
+<<<<<<< HEAD
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, previousLiquidity, address(this), MAX_UINT128, MAX_UINT128);
+=======
+            (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
+>>>>>>> fixed getters and more tests
 
             // 2.Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -407,17 +382,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @notice Remove liquidity and withdraw the underlying assets
      * @param liquidityAmount The amount of liquidity to withdraw
      * @param recipient The address that will receive token0 and token1 tokens
-     * @param amount0Requested Minimum amount of token0 requested
-     * @param amount1Requested Minimum amount of token1 requested
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(
-        uint256 liquidityAmount,
-        address recipient,
-        uint128 amount0Requested,
-        uint128 amount1Requested
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint256 liquidityAmount, address recipient) external returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
         uint256 __supply = _totalSupply;
@@ -426,26 +394,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
         require(_liquidityBurned < uint256(0 - 1));
 
-        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient, amount0Requested, amount1Requested);
+        (amount0, amount1) = _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), recipient);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
-    }
-
-    event BB(bytes jaj);
-
-    function withdrawView(uint256 liquidityAmount) external {
-        uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(_totalSupply);
-        require(_liquidityBurned < uint256(0 - 1));
-
-        (uint256 amount0, uint256 amount1) =
-            _burnOnUniswap(position.lowerTick, position.upperTick, uint128(_liquidityBurned), address(this), MAX_UINT128, MAX_UINT128);
-        bytes memory reason = abi.encode(amount0, amount1);
-        emit BB(reason);
-        assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, amount0)
-            mstore(add(ptr, 32), amount1)
-            revert(ptr, 64)
-        }
     }
 
     /**
@@ -462,8 +412,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
             // Get the fees
-            (uint256 collected0, uint256 collected1) =
-                _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this), MAX_UINT128, MAX_UINT128);
+            (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
             //Figure how much liquity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
@@ -521,16 +470,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         int24 lowerTick,
         int24 upperTick,
         uint128 burnedLiquidity,
-        address recipient,
-        uint128 amount0Requested,
-        uint128 amount1Requested
+        address recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
         // Amount owed migth be more than requested. What do we do?
-        (uint256 _owed0, uint256 _owed1) = pool.burn(lowerTick, upperTick, burnedLiquidity);
-
+        pool.burn(lowerTick, upperTick, burnedLiquidity);
         // Collect all owed
-        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
-
+        (collected0, collected1) = pool.collect(recipient, lowerTick, upperTick, MAX_UINT128, MAX_UINT128);
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(position.id);
         position.uniLiquidity = _liquidity;
