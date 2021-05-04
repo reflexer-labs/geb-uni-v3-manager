@@ -518,7 +518,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function testFail_withdrawing_zero_liq() public {
-        helper_addLiquidity(3); // Starting with a bit of liquidity
+        helper_addLiquidity(3); //Starting with a bit of liquidity
         u3.doWithdraw(0);
     }
 
