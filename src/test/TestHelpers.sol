@@ -7,16 +7,22 @@ import "../uni/UniswapV3Pool.sol";
 import "../erc20/ERC20.sol";
 
 // --- Token Contracts ---
-contract TestRAI is ERC20 {
-    constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
-        _mint(msg.sender, 12000000000000000 ether);
+contract TestToken is ERC20 {
+    constructor(string memory _symbol, uint256 supply) public ERC20(_symbol, _symbol) {
+        _mint(msg.sender, supply);
+    }
+
+    function mintTo(address _recipient, uint256 _amount) public {
+        _mint(_recipient, _amount);
     }
 }
 
-contract TestWETH is ERC20 {
-    constructor(string memory _symbol) public ERC20(_symbol, _symbol) {
-        _mint(msg.sender, 300000000 ether);
-    }
+contract TestRAI is TestToken {
+    constructor(string memory _symbol) public TestToken(_symbol, 12000000000000000 ether) {}
+}
+
+contract TestWETH is TestToken {
+    constructor(string memory _symbol) public TestToken(_symbol, 300000000 ether) {}
 }
 
 abstract contract Hevm {
@@ -27,15 +33,15 @@ abstract contract Hevm {
 
 contract PoolUser {
     GebUniswapV3LiquidityManager manager;
-    TestRAI rai;
-    TestWETH weth;
+    TestToken rai;
+    TestToken weth;
     UniswapV3Pool pool;
 
     constructor(
         GebUniswapV3LiquidityManager man,
         UniswapV3Pool _pool,
-        TestRAI _r,
-        TestWETH _w
+        TestToken _r,
+        TestToken _w
     ) public {
         pool = _pool;
         manager = man;
@@ -68,20 +74,20 @@ contract PoolUser {
         IERC20(token).approve(who, amount);
     }
 
-    function doMintOnPool(
-        int24 lowerTick,
-        int24 upperTick,
-        uint128 liquidityAmount
+    function doMint(
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _amount
     ) public {
-        pool.mint(address(this), lowerTick, upperTick, liquidityAmount, bytes(""));
+        pool.mint(address(this), _tickLower, _tickUpper, _amount, new bytes(0));
     }
 
-    function doBurnOnPool(
-        int24 lowerTick,
-        int24 upperTick,
-        uint128 liquidityAmount
+    function doBurn(
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _amount
     ) public {
-        pool.burn(lowerTick, upperTick, liquidityAmount);
+        pool.burn(_tickLower, _tickUpper, _amount);
     }
 
     function doCollectFromPool(
@@ -95,13 +101,11 @@ contract PoolUser {
     }
 
     function doSwap(
-        address recipient,
-        bool zeroForOne,
-        int256 amountSpecified,
-        uint160 sqrtPriceLimitX96,
-        bytes memory data
+        bool _zeroForOne,
+        int256 _amountSpecified,
+        uint160 _sqrtPriceLimitX96
     ) public {
-        pool.swap(recipient, zeroForOne, amountSpecified, sqrtPriceLimitX96, data);
+        pool.swap(address(this), _zeroForOne, _amountSpecified, _sqrtPriceLimitX96, new bytes(0));
     }
 
     function uniswapV3SwapCallback(
