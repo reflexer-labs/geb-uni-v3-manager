@@ -96,3 +96,17 @@ However, the failure can happen from changing the `threshold` but not performing
 -   While this does not need to be addressed in the real world, for the next iteration we'll force a rebalance after every parameter adjustments, in order to find deeper hidden bugs.
 
 ### Third run
+
+#### Results:
+
+```bash
+echidna_select_ticks_correctly: passed! 🎉
+echidna_position_integrity: passed! 🎉
+echidna_manager_never_owns_tokens: passed! 🎉
+echidna_manager_doesnt_have_position_if_supply_is_zero: passed! 🎉
+echidna_supply_integrity: passed! 🎉
+echidna_id_integrity: passed! 🎉
+echidna_always_has_a_position: passed! 🎉
+
+Seed: -4476645346192855678
+```
