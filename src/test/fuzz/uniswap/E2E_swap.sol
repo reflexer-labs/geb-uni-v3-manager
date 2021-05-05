@@ -22,6 +22,7 @@ contract E2E_swap {
 
     int24[] usedTicks;
     bool inited;
+    bool set = false;
 
     struct PoolParams {
         uint24 fee;
@@ -312,6 +313,7 @@ contract E2E_swap {
     //
 
     function test_swap_exactIn_zeroForOne(uint128 _amount) public {
+        require(set);
         require(_amount != 0);
 
         if (!inited) _init(_amount);
@@ -326,6 +328,7 @@ contract E2E_swap {
     }
 
     function test_swap_exactIn_oneForZero(uint128 _amount) public {
+        require(set);
         require(_amount != 0);
 
         if (!inited) _init(_amount);
@@ -339,6 +342,7 @@ contract E2E_swap {
     }
 
     function test_swap_exactOut_zeroForOne(uint128 _amount) public {
+        require(set);
         require(_amount != 0);
 
         if (!inited) _init(_amount);
@@ -353,6 +357,7 @@ contract E2E_swap {
     }
 
     function test_swap_exactOut_oneForZero(uint128 _amount) public {
+        require(set);
         require(_amount != 0);
 
         if (!inited) _init(_amount);
@@ -366,6 +371,7 @@ contract E2E_swap {
     }
 
     function test_mint(uint128 _amount) public {
+        require(set);
         if (!inited) _init(_amount);
         (int24 _tL, int24 _tU) = forgePosition(_amount, poolParams.tickSpacing, poolParams.tickCount, poolParams.maxTick);
 
@@ -390,6 +396,7 @@ contract E2E_swap {
     }
 
     function test_burn_partial(uint128 _amount) public {
+        require(set);
         require(positions.length > 0);
 
         (uint128 posIdx, uint128 burnAmount) = _getRandomPositionIdxAndBurnAmount(_amount);
@@ -439,6 +446,7 @@ contract E2E_swap {
     }
 
     function test_burn_zero(uint128 _amount) public {
+        require(set);
         require(positions.length > 0);
 
         uint128 posIdx = _getRandomPositionIdx(_amount, positions.length);

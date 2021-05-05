@@ -15,12 +15,16 @@ contract GebTest is DSTest {
         f = new Fuzzer();
     }
 
+    event AD(int24 la);
+
     function test_fff() public {
-        // f.init();
-        f.user_Deposit(2, 100008);
-        f.user_WithDraw(2, 99999);
-        f.user_Mint(3, -887270, 887270, 10000);
-        f.user_Burn(3, -887270, 887270, 5000);
+        // f.init(12);
+        f.test_swap_exactOut_oneForZero(38173249315594130217491356682780247106);
+        GebUniswapV3LiquidityManager manager = f.manager();
+        uint256 t = manager.totalSupply();
+        emit log_named_uint("t", t);
+        // emit log_named_uint("amount0", amount0);
+
         assertTrue(false);
     }
 }

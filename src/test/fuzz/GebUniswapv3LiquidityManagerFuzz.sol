@@ -22,10 +22,10 @@ contract Fuzzer is E2E_swap {
 
     constructor() public {}
 
-    function init() public {
-        _init(3);
-        setUp();
-    }
+    // function init(uint128 rand) public {
+    //     _init(rand);
+    //     setUp();
+    // }
 
     // --- All Possible Actions ---
     function changeThreshold(uint256 val) public {
@@ -42,6 +42,7 @@ contract Fuzzer is E2E_swap {
     }
 
     function changeRedemptionPrice(uint256 newPrice) public {
+        require(newPrice > 600000000 ether && newPrice < 3600000000 ether);
         if (!inited) {
             _init(uint128(newPrice));
             setUp();
@@ -50,6 +51,7 @@ contract Fuzzer is E2E_swap {
     }
 
     function changeCollateralPrice(uint256 newPrice) public {
+        require(newPrice > 100 ether && newPrice < 1000 ether);
         if (!inited) {
             _init(uint128(newPrice));
             setUp();
@@ -146,19 +148,9 @@ contract Fuzzer is E2E_swap {
     }
 
     // --- Echidna Tests ---
-    function echidna_sanity_check() public returns (bool) {
-        return address(manager) == address(0);
-    }
-
-    function echidna_select_ticks_correctly() public returns (bool) {
-        if (!inited) {
-            return true;
-        }
-        int24 tickPrice = manager.lastRebalancePrice();
-        uint256 _threshold = manager.threshold();
-        (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
-        return (lower + int24(_threshold) <= tickPrice && upper - int24(_threshold) >= tickPrice);
-    }
+    // function echidna_sanity_check() public returns (bool) {
+    //     return address(manager) == address(0);
+    // }
 
     function echidna_position_integrity() public returns (bool) {
         if (!inited) {
@@ -188,6 +180,16 @@ contract Fuzzer is E2E_swap {
         return (posId == id);
     }
 
+    function echidna_select_ticks_correctly() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        int24 tickPrice = manager.lastRebalancePrice();
+        uint256 _threshold = manager.threshold();
+        (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
+        return (lower + int24(_threshold) <= tickPrice && upper - int24(_threshold) >= tickPrice);
+    }
+
     function echidna_supply_integrity() public returns (bool) {
         if (!inited) {
             return true;
@@ -204,10 +206,10 @@ contract Fuzzer is E2E_swap {
 
     // --- Copied from test file ---
 
-    GebUniswapV3LiquidityManager manager;
+    GebUniswapV3LiquidityManager public manager;
     OracleLikeMock oracle;
 
-    uint256 threshold = 400000; //40%
+    uint256 threshold = 420000; //40%
     uint256 delay = 120 minutes; //10 minutes
 
     uint160 initialPoolPrice;
@@ -248,6 +250,8 @@ contract Fuzzer is E2E_swap {
         token1.approve(address(manager), 1000000 ether);
 
         helper_transferToAdds(users);
+
+        set = true;
     }
 
     function helper_transferToAdds(FuzzUser[4] memory adds) internal {

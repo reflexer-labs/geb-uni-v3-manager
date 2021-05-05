@@ -141,7 +141,6 @@ contract E2E_mint_burn {
     //
     //
 
-
     //
     //
     // Helper to reconstruct the "random" init setup of the pool
@@ -188,16 +187,16 @@ contract E2E_mint_burn {
         //
         // decide on one of the three fees, and corresponding tickSpacing
         //
-        if (_seed % 3 == 0) {
-            _poolParams.fee = uint24(500);
-            _poolParams.tickSpacing = int24(10);
-        } else if (_seed % 3 == 1) {
-            _poolParams.fee = uint24(3000);
-            _poolParams.tickSpacing = int24(60);
-        } else if (_seed % 3 == 2) {
-            _poolParams.fee = uint24(10000);
-            _poolParams.tickSpacing = int24(2000);
-        }
+        _poolParams.fee = uint24(500);
+        _poolParams.tickSpacing = int24(10);
+
+        // else if (_seed % 3 == 1) {
+        //     _poolParams.fee = uint24(3000);
+        //     _poolParams.tickSpacing = int24(60);
+        // } else if (_seed % 3 == 2) {
+        //     _poolParams.fee = uint24(10000);
+        //     _poolParams.tickSpacing = int24(2000);
+        // }
 
         _poolParams.maxTick = (int24(887272) / _poolParams.tickSpacing) * _poolParams.tickSpacing;
         _poolParams.minTick = -_poolParams.maxTick;
@@ -206,18 +205,9 @@ contract E2E_mint_burn {
         //
         // set the initial price
         //
-        _poolParams.startTick = int24((_seed % uint128(_poolParams.tickCount)) * uint128(_poolParams.tickSpacing));
-        if (_seed % 3 == 0) {
-            // set below 0
-            _poolParams.startPrice = TickMath.getSqrtRatioAtTick(-_poolParams.startTick);
-        } else if (_seed % 3 == 1) {
-            // set at 0
-            _poolParams.startPrice = TickMath.getSqrtRatioAtTick(0);
-            _poolParams.startTick = 0;
-        } else if (_seed % 3 == 2) {
-            // set above 0
-            _poolParams.startPrice = TickMath.getSqrtRatioAtTick(_poolParams.startTick);
-        }
+        _poolParams.startTick = int24(-800000);
+        // set below 0
+        _poolParams.startPrice = TickMath.getSqrtRatioAtTick(-_poolParams.startTick);
     }
 
     function _init(uint128 _seed) internal {

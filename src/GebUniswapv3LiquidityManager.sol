@@ -121,6 +121,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         _;
     }
 
+    event GB(int24 p);
+    event TT(uint256 s);
+
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
@@ -157,6 +160,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
+        emit GB(tickSpacing);
+        emit TT(threshold_);
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
 
         // Setting variables
