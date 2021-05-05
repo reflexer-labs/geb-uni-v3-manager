@@ -19,7 +19,7 @@ contract GebTest is DSTest {
 
     function test_fff() public {
         // f.init(12);
-        f.user_Swap(1, 1);
+        f.changeThreshold(10320);
         f.echidna_select_ticks_correctly();
         // emit log_named_uint("amount0", amount0);
 

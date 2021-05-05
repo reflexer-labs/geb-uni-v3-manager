@@ -69,3 +69,30 @@ After adjusting the parameters, a second round of fuzzing was run. Two more prop
 2. When the manager has an open position in the pool, it must also have a total supply greater than 0.
 
 #### Results:
+
+```
+echidna_select_ticks_correctly: failed!💥
+  Call sequence, shrinking (6378/50000):
+    changeThreshold(10320)
+
+echidna_position_integrity: passed! 🎉
+echidna_manager_never_owns_tokens: passed! 🎉
+echidna_manager_doesnt_have_position_if_supply_is_zero: passed! 🎉
+echidna_supply_integrity: passed! 🎉
+echidna_id_integrity: passed! 🎉
+echidna_always_has_a_position: passed! 🎉
+
+Seed: -8499657479103175191
+```
+
+#### Analysis:
+
+After the adjustments, only one of the assertions is failing. This specific assertion guarantees that the manager range is at least half of the threshold, which should only happen if the redemption price is equal to either `MIN_THRESHOLD` or `MAX_THRESHOLD`.
+
+However, the failure can happen from changing the `threshold` but not performing a rebalance or a deposit right afterwards, when Echidna will return a result based on the new threshold while the pool still has a position using the old one.
+
+#### Adjustments:
+
+-   While this does not need to be addressed in the real world, for the next iteration we'll force a rebalance after every parameter adjustments, in order to find deeper hidden bugs.
+
+### Third run
