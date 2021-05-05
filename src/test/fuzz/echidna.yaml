@@ -1,5 +1,5 @@
-seqLen: 3
-testLimit: 500
+seqLen: 100
+testLimit: 5000
 # checkAsserts: true
 # sender: ["0x10000", "0x20000", "0xabc00"]
 coverage: true
@@ -8,4 +8,4 @@ coverage: true
 codeSize: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 testMaxGas: 1250000000000000000000000
 estimateGas: false
-# shrinkLimit: 50000
+shrinkLimit: 50000
