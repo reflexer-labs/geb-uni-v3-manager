@@ -173,7 +173,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         poolViewer = poolViewer_;
 
         // Starting position
-        (int24 _lower, int24 _upper, ) = getNextTicks();
+        (int24 _lower, int24 _upper, int24 price) = getNextTicks();
+        lastRebalancePrice = price;
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
 
@@ -310,9 +311,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         if (_liquidity == 0) return 0;
         (, amount1) = getTokenAmountsFromLiquidity(_liquidity);
     }
-
-    event D(uint256 l);
-    event I(int24 q);
 
     /**
      * @notice Add liquidity to this uniswap pool manager

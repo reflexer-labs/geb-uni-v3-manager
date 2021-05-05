@@ -180,6 +180,8 @@ contract Fuzzer is E2E_swap {
         return (posId == id);
     }
 
+    event DC(int24 l);
+
     function echidna_select_ticks_correctly() public returns (bool) {
         if (!inited) {
             return true;
@@ -187,7 +189,7 @@ contract Fuzzer is E2E_swap {
         int24 tickPrice = manager.lastRebalancePrice();
         uint256 _threshold = manager.threshold();
         (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
-        return (lower + int24(_threshold) <= tickPrice && upper - int24(_threshold) >= tickPrice);
+        return (lower + int24(_threshold) >= tickPrice && upper - int24(_threshold) <= tickPrice);
     }
 
     function echidna_supply_integrity() public returns (bool) {
@@ -202,6 +204,28 @@ contract Fuzzer is E2E_swap {
 
         uint256 total = this_bal.add(u1_bal).add(u2_bal).add(u3_bal).add(u4_bal);
         return (manager.totalSupply() == total);
+    }
+
+    function echidna_manager_never_owns_tokens() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        uint256 t0_bal = token0.balanceOf(address(manager));
+        uint256 t1_bal = token0.balanceOf(address(manager));
+
+        return t0_bal == 0 && t1_bal == 0;
+    }
+
+    function echidna_manager_doesnt_have_position_if_supply_is_zero() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        (, , , uint128 liq) = manager.position();
+        if (liq > 0) {
+            return manager.totalSupply() > 0;
+        } else {
+            return true;
+        }
     }
 
     // --- Copied from test file ---
