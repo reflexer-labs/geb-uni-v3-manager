@@ -23,6 +23,36 @@ abstract contract OracleLike {
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
 contract GebUniswapV3LiquidityManager is ERC20 {
+    // --- Authorization ---
+    mapping(address => uint256) public authorizedAccounts;
+
+    /**
+     * @notice Add auth to an account
+     * @param account Account to add auth to
+     */
+    function addAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 1;
+        emit AddAuthorization(account);
+    }
+
+    /**
+     * @notice Remove auth from an account
+     * @param account Account to remove auth from
+     */
+    function removeAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 0;
+        emit RemoveAuthorization(account);
+    }
+
+    /**
+     * @notice Checks whether msg.sender can call an authed function
+     **/
+
+    modifier isAuthorized() {
+        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
+        _;
+    }
+
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -91,36 +121,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
 
-    // --- Auth ---
-    mapping(address => uint256) public authorizedAccounts;
-
-    /**
-     * @notice Add auth to an account
-     * @param account Account to add auth to
-     */
-    function addAuthorization(address account) external isAuthorized {
-        authorizedAccounts[account] = 1;
-        emit AddAuthorization(account);
-    }
-
-    /**
-     * @notice Remove auth from an account
-     * @param account Account to remove auth from
-     */
-    function removeAuthorization(address account) external isAuthorized {
-        authorizedAccounts[account] = 0;
-        emit RemoveAuthorization(account);
-    }
-
-    /**
-     * @notice Checks whether msg.sender can call an authed function
-     **/
-
-    modifier isAuthorized() {
-        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
-        _;
-    }
-
     event GB(int24 p);
     event TT(uint256 s);
 
@@ -132,7 +132,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      * @param threshold_ The liquidity threshold around the redemption price
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
-     * @param oracle_ Address of the already deployed oracle that provides both prices
+     * @param oracle_ Address of the already deployed oracle that provides both token prices
      */
     constructor(
         string memory name_,
