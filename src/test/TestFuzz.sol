@@ -19,10 +19,8 @@ contract GebTest is DSTest {
 
     function test_fff() public {
         // f.init(12);
-        f.test_swap_exactOut_oneForZero(38173249315594130217491356682780247106);
-        GebUniswapV3LiquidityManager manager = f.manager();
-        uint256 t = manager.totalSupply();
-        emit log_named_uint("t", t);
+        f.user_Swap(1, 1);
+        f.echidna_select_ticks_correctly();
         // emit log_named_uint("amount0", amount0);
 
         assertTrue(false);

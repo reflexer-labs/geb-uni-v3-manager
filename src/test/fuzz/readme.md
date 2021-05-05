@@ -52,7 +52,7 @@ Seed: 4714442236582541202
 
 #### Analysis:
 
-All of the assertions were easily broken, but mostly due to the same issue: the market price detaching completely from the redemption price, either to a swap that crashes the price or to a direct redemption price change. The supply assertion needs further research, as it shouldn't break by any of it.
+All of the assertions were easily broken, but mostly due to the same issue: the market price detaching completely from the redemption price, either to a swap that crashes the price or to a direct redemption price change.
 
 Therefore it's possible to conclude that when that happens, the manager contract itself loose it's purpose.
 
@@ -60,3 +60,12 @@ Therefore it's possible to conclude that when that happens, the manager contract
 
 -   Set initial pool parameters but close to the real world, and set the pool's initial price close to the starting redemption price
 -   Bound the price changes to values closer to real world.
+
+### Second run
+
+After adjusting the parameters, a second round of fuzzing was run. Two more properties were added:
+
+1. Manager contract never owns tokens, to ensure no leftover token0 or token1.
+2. When the manager has an open position in the pool, it must also have a total supply greater than 0.
+
+#### Results:
