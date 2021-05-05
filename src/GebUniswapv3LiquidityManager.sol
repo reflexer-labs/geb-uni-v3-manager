@@ -32,7 +32,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     uint24 public fee;
     // The pool's tickSpacing
     int24 public tickSpacing;
-    // The pool's maximum liquisity per tick
+    // The pool's maximum liquidity per tick
     uint128 public maxLiquidityPerTick;
     // Flag to identify whether the system coin is token0 or token1. Needed for correct tick calculation
     bool systemCoinIsT0;
@@ -54,9 +54,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     // --- External Contracts ---
     // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
-    // Address of oracle relayer to get prices from
+    // Address of the oracle contract to get token prices from
     OracleLike public oracle;
-    // Address of contract that allows simulating pool fuctions
+    // Address of contract that allows pool fuction simulations
     PoolViewer public poolViewer;
 
     // --- Constants ---
