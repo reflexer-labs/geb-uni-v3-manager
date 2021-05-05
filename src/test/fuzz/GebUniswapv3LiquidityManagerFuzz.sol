@@ -34,6 +34,7 @@ contract Fuzzer is E2E_swap {
             setUp();
         }
         manager.modifyParameters(bytes32("threshold"), val);
+        manager.rebalance();
     }
 
     function rebalancePosition() public {
@@ -189,6 +190,9 @@ contract Fuzzer is E2E_swap {
         int24 tickPrice = manager.lastRebalancePrice();
         uint256 _threshold = manager.threshold();
         (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
+        emit DC(tickPrice);
+        emit DC(lower);
+        emit DC(upper);
         return (lower + int24(_threshold) >= tickPrice && upper - int24(_threshold) <= tickPrice);
     }
 
