@@ -121,6 +121,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         _;
     }
 
+    event GB(int24 p);
+    event TT(uint256 s);
+
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
@@ -157,6 +160,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
+        emit GB(tickSpacing);
+        emit TT(threshold_);
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
 
         // Setting variables
@@ -168,7 +173,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         poolViewer = poolViewer_;
 
         // Starting position
-        (int24 _lower, int24 _upper, ) = getNextTicks();
+        (int24 _lower, int24 _upper, int24 price) = getNextTicks();
+        lastRebalancePrice = price;
         position = Position({ id: keccak256(abi.encodePacked(address(this), _lower, _upper)), lowerTick: _lower, upperTick: _upper, uniLiquidity: 0 });
     }
 
@@ -330,9 +336,8 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 compoundLiquidity = 0;
         uint256 collected0 = 0;
         uint256 collected1 = 0;
-
         // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (previousLiquidity > 0 || (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
+        if (previousLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1.Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 

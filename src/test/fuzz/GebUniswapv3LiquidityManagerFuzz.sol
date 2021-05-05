@@ -1,5 +1,5 @@
 pragma solidity ^0.6.7;
-
+pragma experimental ABIEncoderV2;
 import { ERC20 } from "../.././erc20/ERC20.sol";
 import { IUniswapV3Pool } from "../.././uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "../.././uni/interfaces/callback/IUniswapV3MintCallback.sol";
@@ -10,51 +10,102 @@ import "../../uni/UniswapV3Factory.sol";
 import ".././TestHelpers.sol";
 import ".././GebUniswapv3LiquidityManager.t.sol";
 
+import "./uniswap/Setup.sol";
+import "./uniswap/E2E_swap.sol";
+
 /**
  * Interface contract aimed at fuzzing the Uniswap Liquidity Manager
  * Very similar to GebUniswap v3 tester
  */
-contract Fuzzer {
+contract Fuzzer is E2E_swap {
     using SafeMath for uint256;
-    PoolUser[4] public users;
 
-    constructor() public {
-        setUp();
-    }
+    constructor() public {}
+
+    // function init(uint128 rand) public {
+    //     _init(rand);
+    //     setUp();
+    // }
 
     // --- All Possible Actions ---
     function changeThreshold(uint256 val) public {
+        if (!inited) {
+            _init(uint128(val));
+            setUp();
+        }
         manager.modifyParameters(bytes32("threshold"), val);
-    }
-
-    function rebalancePosition() public {
         manager.rebalance();
     }
 
+    function rebalancePosition() public {
+        require(inited);
+        manager.rebalance();
+    }
+
+    function changeRedemptionPrice(uint256 newPrice) public {
+        require(newPrice > 600000000 ether && newPrice < 3600000000 ether);
+        if (!inited) {
+            _init(uint128(newPrice));
+            setUp();
+        }
+        oracle.setSystemCoinPrice(newPrice);
+    }
+
+    function changeCollateralPrice(uint256 newPrice) public {
+        require(newPrice > 100 ether && newPrice < 1000 ether);
+        if (!inited) {
+            _init(uint128(newPrice));
+            setUp();
+        }
+        oracle.setCollateralPrice(newPrice);
+    }
+
+    //Not using recipient to test totalSupply integrity
     function depositForRecipient(address recipient, uint128 liquidityAmount) public {
+        if (!inited) {
+            _init(liquidityAmount);
+            setUp();
+        }
+        if (!inited) _init(liquidityAmount);
         manager.deposit(liquidityAmount, address(this));
     }
 
     function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
-        uint128 max_uint128 = uint128(0 - 1);
+        if (!inited) {
+            _init(liquidityAmount);
+            setUp();
+        }
         manager.withdraw(liquidityAmount, address(this));
     }
 
     function user_Deposit(uint8 user, uint128 liq) public {
+        if (!inited) {
+            _init(liq);
+            setUp();
+        }
         users[user % 4].doDeposit(liq);
     }
 
     function user_WithDraw(uint8 user, uint128 liq) public {
+        if (!inited) {
+            _init(liq);
+            setUp();
+        }
         users[user % 4].doWithdraw(liq);
     }
 
+    //Repeated from E2E_swap, but it doesn't hurt to allow pool depositors to interact with pool directly
     function user_Mint(
         uint8 user,
         int24 lowerTick,
         int24 upperTick,
         uint128 liquidityAmount
     ) public {
-        users[user % 4].doMintOnPool(lowerTick, upperTick, liquidityAmount);
+        if (!inited) {
+            _init(liquidityAmount);
+            setUp();
+        }
+        users[user % 4].doMint(lowerTick, upperTick, liquidityAmount);
     }
 
     function user_Burn(
@@ -63,7 +114,11 @@ contract Fuzzer {
         int24 upperTick,
         uint128 liquidityAmount
     ) public {
-        users[user % 4].doBurnOnPool(lowerTick, upperTick, liquidityAmount);
+        if (!inited) {
+            _init(liquidityAmount);
+            setUp();
+        }
+        users[user % 4].doBurn(lowerTick, upperTick, liquidityAmount);
     }
 
     function user_Collect(
@@ -74,41 +129,77 @@ contract Fuzzer {
         uint128 amount0Requested,
         uint128 amount1Requested
     ) public {
+        if (!inited) {
+            _init(amount0Requested);
+            setUp();
+        }
         users[user % 4].doCollectFromPool(lowerTick, upperTick, recipient, amount0Requested, amount1Requested);
     }
 
-    function user_Swap(
-        uint8 user,
-        address recipient,
-        bool zeroForOne,
-        int256 amountSpecified,
-        uint160 sqrtPriceLimitX96
-    ) public {
-        users[user % 4].doSwap(recipient, zeroForOne, amountSpecified, sqrtPriceLimitX96, bytes(""));
+    function user_Swap(uint8 user, int256 _amount) public {
+        if (!inited) {
+            _init(uint128(user));
+            setUp();
+        }
+        require(token0.balanceOf(address(swapper)) > 0);
+        int256 _amountSpecified = -int256(_amount);
+
+        uint160 sqrtPriceLimitX96 = get_random_oneForZero_priceLimit(_amount);
+        users[user % 4].doSwap(false, _amountSpecified, sqrtPriceLimitX96);
     }
 
     // --- Echidna Tests ---
-
-    function echidna_manager_supply_equal_liquidity() public returns (bool) {
-        (bytes32 posId, , , ) = manager.position();
-        (uint128 _liquidity, , , , ) = pool.positions(posId);
-        return (manager.totalSupply() == _liquidity);
-    }
-
-    function echidna_select_ticks_correctly() public returns (bool) {
-        int24 tickPrice = manager.lastRebalancePrice();
-        uint256 _threshold = manager.threshold();
-        (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
-        return (lower + int24(_threshold) <= tickPrice && upper - int24(_threshold) >= tickPrice);
-    }
+    // function echidna_sanity_check() public returns (bool) {
+    //     return address(manager) == address(0);
+    // }
 
     function echidna_position_integrity() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
         (bytes32 posId, , , uint128 liq) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(posId);
         return (liq == _liquidity);
     }
 
+    function echidna_always_has_a_position() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        (bytes32 posId, , , ) = manager.position();
+        (uint128 _liquidity, , , , ) = pool.positions(posId);
+        if (manager.totalSupply() > 0) return (_liquidity > 0);
+        return true; //If there's no supply it's fine
+    }
+
+    function echidna_id_integrity() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        (bytes32 posId, int24 low, int24 up, uint128 liq) = manager.position();
+        bytes32 id = keccak256(abi.encodePacked(address(manager), low, up));
+        return (posId == id);
+    }
+
+    event DC(int24 l);
+
+    function echidna_select_ticks_correctly() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        int24 tickPrice = manager.lastRebalancePrice();
+        uint256 _threshold = manager.threshold();
+        (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
+        emit DC(tickPrice);
+        emit DC(lower);
+        emit DC(upper);
+        return (lower + int24(_threshold) >= tickPrice && upper - int24(_threshold) <= tickPrice);
+    }
+
     function echidna_supply_integrity() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
         uint256 this_bal = manager.balanceOf(address(this));
         uint256 u1_bal = manager.balanceOf(address(u1));
         uint256 u2_bal = manager.balanceOf(address(u2));
@@ -119,82 +210,128 @@ contract Fuzzer {
         return (manager.totalSupply() == total);
     }
 
+    function echidna_manager_never_owns_tokens() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        uint256 t0_bal = token0.balanceOf(address(manager));
+        uint256 t1_bal = token0.balanceOf(address(manager));
+
+        return t0_bal == 0 && t1_bal == 0;
+    }
+
+    function echidna_manager_doesnt_have_position_if_supply_is_zero() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        (, , , uint128 liq) = manager.position();
+        if (liq > 0) {
+            return manager.totalSupply() > 0;
+        } else {
+            return true;
+        }
+    }
+
     // --- Copied from test file ---
 
-    GebUniswapV3LiquidityManager manager;
-    UniswapV3Pool pool;
-    TestRAI testRai;
-    TestWETH testWeth;
+    GebUniswapV3LiquidityManager public manager;
     OracleLikeMock oracle;
-    address token0;
-    address token1;
 
-    uint256 threshold = 500000; //50%
+    uint256 threshold = 420000; //40%
     uint256 delay = 120 minutes; //10 minutes
 
-    uint160 initialPoolPrice = 25054144837504793118641380156;
-    // uint160 initialPoolPrice = 890102030748522;
+    uint160 initialPoolPrice;
 
-    PoolUser u1;
-    PoolUser u2;
-    PoolUser u3;
-    PoolUser u4;
+    FuzzUser u1;
+    FuzzUser u2;
+    FuzzUser u3;
+    FuzzUser u4;
 
+    FuzzUser[4] public users;
     PoolViewer pv;
 
     function setUp() internal {
         oracle = new OracleLikeMock();
-        // Deploy each token
-        testRai = new TestRAI("RAI");
-        testWeth = new TestWETH("WETH");
-        (token0, token1) = address(testRai) < address(testWeth) ? (address(testRai), address(testWeth)) : (address(testWeth), address(testRai));
-        // Deploy Pool
         pv = new PoolViewer();
 
-        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500, initialPoolPrice));
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
-        u1 = new PoolUser(manager, pool, testRai, testWeth);
-        u2 = new PoolUser(manager, pool, testRai, testWeth);
-        u3 = new PoolUser(manager, pool, testRai, testWeth);
-        u4 = new PoolUser(manager, pool, testRai, testWeth);
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
+
+        u1 = new FuzzUser(manager, token0, token1);
+        u2 = new FuzzUser(manager, token0, token1);
+        u3 = new FuzzUser(manager, token0, token1);
+        u4 = new FuzzUser(manager, token0, token1);
+
+        u1.setPool(pool);
+        u2.setPool(pool);
+        u3.setPool(pool);
+        u4.setPool(pool);
 
         users[0] = u1;
         users[1] = u2;
         users[2] = u3;
         users[3] = u4;
 
-        //Transfer tokens for address
-        address[] memory adds = new address[](4);
-        adds[0] = address(u1);
-        adds[1] = address(u2);
-        adds[2] = address(u3);
-        adds[3] = address(u4);
-        helper_transferToAdds(adds);
+        token0.mintTo(address(this), 1000000 ether);
+        token1.mintTo(address(this), 1000000 ether);
+
+        token0.approve(address(manager), 1000000 ether);
+        token1.approve(address(manager), 1000000 ether);
+
+        helper_transferToAdds(users);
+
+        set = true;
     }
 
-    function helper_deployV3Pool(
-        address _token0,
-        address _token1,
-        uint256 fee,
-        uint160 _initialPoolPrice
-    ) internal returns (address _pool) {
-        UniswapV3Factory fac = new UniswapV3Factory();
-        _pool = fac.createPool(token0, token1, uint24(fee));
-        UniswapV3Pool(_pool).initialize(_initialPoolPrice);
-    }
-
-    function helper_changeRedemptionPrice(uint256 newPrice) public {
-        oracle.setSystemCoinPrice(newPrice);
-    }
-
-    function helper_changeCollateralPrice(uint256 newPrice) public {
-        oracle.setCollateralPrice(newPrice);
-    }
-
-    function helper_transferToAdds(address[] memory adds) internal {
+    function helper_transferToAdds(FuzzUser[4] memory adds) internal {
         for (uint256 i = 0; i < adds.length; i++) {
-            testWeth.transfer(adds[i], 100000 ether);
-            testRai.transfer(adds[i], 100000 ether);
+            token0.mintTo(address(adds[i]), 30000 ether);
+            token1.mintTo(address(adds[i]), 120000000000 ether);
+
+            adds[i].doApprove(address(token0), address(manager), 30000 ether);
+            adds[i].doApprove(address(token1), address(manager), 120000000000 ether);
+        }
+    }
+
+    function helper_getRebalancePrice() internal returns (uint160) {
+        // 1. Get prices from the oracle relayer
+        (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
+
+        // 2. Calculate the price ratio
+        uint160 sqrtPriceX96;
+        if (!(address(pool.token0()) == address(token0))) {
+            sqrtPriceX96 = uint160(sqrt((redemptionPrice << 96) / ethUsdPrice));
+        } else {
+            sqrtPriceX96 = uint160(sqrt((ethUsdPrice << 96) / redemptionPrice));
+        }
+        return sqrtPriceX96;
+    }
+
+    function helper_getLiquidityAmountsForTicks(
+        uint160 sqrtRatioX96,
+        int24 _lowerTick,
+        int24 upperTick,
+        uint256 t0am,
+        uint256 t1am
+    ) public returns (uint128 liquidity) {
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtRatioX96,
+            TickMath.getSqrtRatioAtTick(_lowerTick),
+            TickMath.getSqrtRatioAtTick(upperTick),
+            t0am,
+            t1am
+        );
+    }
+
+    function sqrt(uint256 y) internal pure returns (uint256 z) {
+        if (y > 3) {
+            z = y;
+            uint256 x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
         }
     }
 
@@ -203,7 +340,21 @@ contract Fuzzer {
         uint256 amount1Owed,
         bytes calldata data
     ) external {
-        testRai.transfer(msg.sender, amount0Owed);
-        testWeth.transfer(msg.sender, amount0Owed);
+        token0.transfer(msg.sender, amount0Owed);
+        token1.transfer(msg.sender, amount0Owed);
+    }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        if (address(pool.token0()) == address(token0)) {
+            if (amount0Delta > 0) token0.transfer(msg.sender, uint256(amount0Delta));
+            if (amount1Delta > 0) token1.transfer(msg.sender, uint256(amount1Delta));
+        } else {
+            if (amount1Delta > 0) token0.transfer(msg.sender, uint256(amount1Delta));
+            if (amount0Delta > 0) token1.transfer(msg.sender, uint256(amount0Delta));
+        }
     }
 }
