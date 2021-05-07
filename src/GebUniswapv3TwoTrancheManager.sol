@@ -22,7 +22,7 @@ abstract contract OracleLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapV3LiquidityManager is ERC20 {
+contract GebUniswapV3TwoTrancheManager is ERC20 {
   // --- Pool Variables ---
   // The address of pool's token0
   address public token0;
