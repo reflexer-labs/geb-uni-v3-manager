@@ -1,4 +1,4 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 import { ERC20 } from "./erc20/ERC20.sol";
 import "./PoolViewer.sol";
@@ -9,14 +9,7 @@ import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
 abstract contract OracleLike {
-    function getResultsWithValidity()
-        public
-        virtual
-        returns (
-            uint256,
-            uint256,
-            bool
-        );
+    function getResultsWithValidity() public virtual returns (uint256, uint256, bool);
 }
 
 /**
@@ -121,9 +114,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
 
-    event GB(int24 p);
-    event TT(uint256 s);
-
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
@@ -160,8 +150,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        emit GB(tickSpacing);
-        emit TT(threshold_);
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tick-spacing");
 
         // Setting variables
@@ -222,9 +210,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
-            //If it's an ivalid addres, this tx will revert
-            (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
-            oracle = OracleLike(data);
+          // If it's an invalid address, this tx will revert
+          (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
+          oracle = OracleLike(data);
         }
         emit ModifyParameters(parameter, data);
     }
@@ -321,6 +309,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
+
         // Loading to stack to save on SLOADs
         (int24 _currentLowerTick, int24 _currentUpperTick) = (position.lowerTick, position.upperTick);
         uint128 previousLiquidity = position.uniLiquidity;
@@ -336,13 +325,13 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint128 compoundLiquidity = 0;
         uint256 collected0 = 0;
         uint256 collected1 = 0;
-        
+
         // A possible optimization is to only rebalance if the tick diff is significant enough
         if (previousLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
             // 1. Burn and collect all liquidity
             (collected0, collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
-            // 2. Figure how much liquity we can get from our current balances
+            // 2. Figure how much liquidity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
             compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -356,12 +345,12 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             emit Rebalance(msg.sender, block.timestamp);
         }
 
-        // 3.Mint our new position on Uniswap
+        // 3. Mint our new position on Uniswap
         require(newLiquidity + compoundLiquidity >= newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
         _mintOnUniswap(_nextLowerTick, _nextUpperTick, newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
 
-        // 4.Calculate and mint a user's ERC20 liquidity tokens
+        // 4. Calculate and mint a user's ERC20 liquidity tokens
         {
             uint256 __supply = _totalSupply;
             if (__supply == 0) {
@@ -412,7 +401,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
             // Get the fees
             (uint256 collected0, uint256 collected1) = _burnOnUniswap(_currentLowerTick, _currentUpperTick, position.uniLiquidity, address(this));
 
-            //Figure how much liquity we can get from our current balances
+            // Figure out how much liquidity we can get from our current balances
             (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
 
             uint128 compoundLiquidity =

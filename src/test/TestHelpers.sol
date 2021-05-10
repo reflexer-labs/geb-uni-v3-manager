@@ -1,4 +1,4 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 import "../../lib/ds-test/src/test.sol";
 import "../GebUniswapv3LiquidityManager.sol";
