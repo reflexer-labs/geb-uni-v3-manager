@@ -15,7 +15,7 @@ abstract contract OracleForUniswapLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapV3ManagerBase is ERC20 {
+abstract contract GebUniswapV3ManagerBase is ERC20 {
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -57,8 +57,8 @@ contract GebUniswapV3ManagerBase is ERC20 {
     // 1 hour is the absolute minimum delay for a rebalance. Could be less through deposits
     uint256 constant MIN_DELAY = 60 minutes;
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
-    int24 public immutable MAX_TICK;
-    int24 public immutable MIN_TICK;
+    int24 public constant MAX_TICK = 887270;
+    int24 public constant MIN_TICK = -887270;
 
     // --- Struct ---
     struct Position {
@@ -140,11 +140,9 @@ contract GebUniswapV3ManagerBase is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        MIN_TICK = -887272 - (-887272 % tickSpacing);
-        MAX_TICK = 887272 - (887272 % tickSpacing);
+        require(MIN_TICK % tickSpacing == 0,"GebUniswapv3LiquidityManager/invalid-max-tick-for-spacing");
+        require(MAX_TICK % tickSpacing == 0,"GebUniswapv3LiquidityManager/invalid-min-tick-for-spacing");
 
-        // Setting variables
-        // threshold = threshold_;
         delay = delay_;
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         oracle = oracle_;
@@ -200,6 +198,11 @@ contract GebUniswapV3ManagerBase is ERC20 {
         emit ModifyParameters(parameter, data);
     }
 
+    // --- Virtual functions  ---
+    function deposit(uint128 newLiquidity, address recipient) external virtual returns (uint256 mintAmount);
+     function withdraw(uint128 liquidityAmount, address recipient) external virtual returns (uint256 amount0, uint256 amount1);
+     function rebalance() external virtual;
+
     // --- Getters ---
     /**
      * @notice Public function to get both the redemption price for the system coin and the other token's price
@@ -211,6 +214,7 @@ contract GebUniswapV3ManagerBase is ERC20 {
         (redemptionPrice, tokenPrice, valid) = oracle.getResultsWithValidity();
         require(valid, "GebUniswapv3LiquidityManager/invalid-price");
     }
+
 
     /**
      * @notice Function that returns the next target ticks based on the redemption price

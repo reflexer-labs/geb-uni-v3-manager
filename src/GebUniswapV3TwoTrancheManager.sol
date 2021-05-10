@@ -13,8 +13,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
     // Manager positions on uniswap pool
     Position[2] public positions;
     // Ratio for each pool in relation to the total capital, in percents. 1 == 1%
-    uint128 ratio1;
-    uint128 ratio2;
+    uint128 public ratio1;
+    uint128 public ratio2;
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -23,6 +23,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @param systemCoinAddress_ The address of the system coin
      * @param threshold_1 The liquidity threshold around the redemption price
      * @param threshold_2 The liquidity threshold around the redemption price
+     * @param ratio_1 The ratio around that the first position invest with
+     * @param ratio_2 The ratio around that the second position invest with
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both prices
@@ -124,7 +126,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
      *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
-    function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
+    function deposit(uint128 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
 
         uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
@@ -155,7 +157,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(uint128 liquidityAmount, address recipient) external returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint128 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
 
@@ -177,7 +179,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
     /**
      * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
-    function rebalance() external {
+    function rebalance() external override {
         require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
 
         int24 target= getTargetTick();
