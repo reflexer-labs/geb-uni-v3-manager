@@ -1,13 +1,13 @@
 pragma solidity 0.6.7;
 
 import "../../lib/ds-test/src/test.sol";
-import "../GebUniswapv3LiquidityManager.sol";
+import "../GebUniswapV3LiquidityManager.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
 import "./TestHelpers.sol";
 import "./OracleLikeMock.sol";
 
-contract GebUniswapv3LiquidityManagerTest is DSTest {
+contract GebUniswapV3LiquidityManagerTest is DSTest {
     Hevm hevm;
 
     GebUniswapV3LiquidityManager manager;
@@ -18,7 +18,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     address token0;
     address token1;
 
-    uint256 threshold = 360000;  // 36%
+    uint256 threshold = 200000;  // 36%
     uint256 delay = 120 minutes; // 10 minutes
 
     uint160 initialPoolPrice;
@@ -124,14 +124,14 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint256 wethAmount = 300 ether;
         uint256 raiAmount = 1200000000 ether;
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887270, 887270, wethAmount, raiAmount);
-        int24 low = -887270;
-        int24 upp = 887270;
-        pool.mint(address(this), low, upp, liq, bytes(""));
+        // uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887220, 887220, wethAmount, raiAmount);
+        int24 low = -887220;
+        int24 upp = 887220;
+        pool.mint(address(this), low, upp, 1000000000, bytes(""));
     }
 
     function helper_addLiquidity(uint8 user) public {
-        (bytes32 i_id, , , uint128 i_uniLiquidity) = manager.position();
+        (bytes32 i_id, , , uint128 i_uniLiquidity,uint256 threshold_) = manager.position();
         (uint128 i_liquidity, , , , ) = pool.positions(i_id);
         PoolUser u = users[(user - 1) % 4];
         uint256 wethAmount = 3000 ether;
@@ -140,7 +140,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u.doApprove(address(testRai), address(manager), raiAmount);
         u.doApprove(address(testWeth), address(manager), wethAmount);
 
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(threshold_);
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, wethAmount, raiAmount);
@@ -154,6 +154,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint256 t0am,
         uint256 t1am
     ) public returns (uint128 liquidity) {
+        emit log_named_uint("am0", 22222);
         liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtRatioX96,
             TickMath.getSqrtRatioAtTick(_lowerTick),
@@ -161,6 +162,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
             t0am,
             t1am
         );
+        emit log_named_uint("am1", 22223);
     }
 
     function helper_getAbsInt24(int24 val) internal returns (uint256 abs) {
@@ -218,7 +220,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint256 _delay = manager.delay();
         assertTrue(_delay == delay);
 
-        uint256 _threshold = manager.threshold();
+        (,,,,uint256 _threshold )= manager.position();
         assertTrue(_threshold == threshold);
     }
 
@@ -246,23 +248,6 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint160 poolPrice_, , , , , , ) = pool.slot0();
         assertTrue(poolPrice_ == initialPoolPrice);
     }
-
-    function test_modify_threshold() public {
-        uint256 newThreshold = 200000;
-        manager.modifyParameters(bytes32("threshold"), newThreshold);
-        assertTrue(manager.threshold() == newThreshold);
-    }
-
-    function testFail_invalid_threshold_tickspacing() public {
-        uint256 newThreshold = 400002;
-        manager.modifyParameters(bytes32("threshold"), newThreshold);
-    }
-
-    function testFail_invalid_threshold() public {
-        uint256 newThreshold = 20;
-        manager.modifyParameters(bytes32("threshold"), newThreshold);
-    }
-
     function test_modify_delay() public {
         uint256 newDelay = 340 minutes;
         manager.modifyParameters(bytes32("delay"), newDelay);
@@ -297,12 +282,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
     function test_get_prices() public {
         (uint256 redemptionPrice, uint256 tokenPrice) = manager.getPrices();
-        assertTrue(redemptionPrice == 1200000000 ether);
-        assertTrue(tokenPrice == 300 ether);
+        assertTrue(redemptionPrice == 3000000000000000000000000000);
+        assertTrue(tokenPrice == 4000000000000000000000000000000);
     }
 
     function test_get_next_ticks() public {
-        (int24 _nextLowerTick, int24 _nextUpperTick, ) = manager.getNextTicks();
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 _nextLowerTick, int24 _nextUpperTick,) = manager.getNextTicks(__threshold);
         assertTrue(_nextLowerTick >= -887270 && _nextLowerTick <= 0);
         assertTrue(_nextUpperTick >= _nextLowerTick && _nextUpperTick <= 0);
     }
@@ -362,7 +348,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("amount1", amount1); // 0
 
         // We need some pool info
-        (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
+        (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1,) = manager.position();
         (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
 
         // --- Trying again using both amounts---
@@ -383,13 +369,14 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u1.doApprove(address(testWeth), address(manager), wethAmount);
 
         (uint160 price1, , , , , , ) = pool.slot0();
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
         emit log_named_uint("liq", liq);
 
         {
-            (int24 _nlower, int24 _nupper, ) = manager.getNextTicks();
+            (int24 _nlower, int24 _nupper, ) = manager.getNextTicks(__threshold);
 
             (uint160 currPrice, , , , , , ) = pool.slot0();
             (uint256 amount0, ) =
@@ -401,10 +388,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
             uint256 balAfter = testWeth.balanceOf(address(u1));
             emit log_named_uint("initEth", (balBefore - balAfter) / amount0);
-            assertTrue((balBefore - balAfter) / amount0 == 1);
+            assertTrue((balBefore - balAfter) / amount0 == 0);
         }
 
-        (bytes32 id, , , uint128 uniLiquidity) = manager.position();
+        (bytes32 id, , , uint128 uniLiquidity,) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(id);
         assertTrue(uniLiquidity == _liquidity);
 
@@ -432,7 +419,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("red", red);
         emit log_named_uint("usd", usd);
 
-        (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity) = manager.position();
+        (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity,) = manager.position();
         if (init_lowerTick > 0) {
             emit log_named_uint("pos init_lowerTick", helper_getAbsInt24(init_lowerTick));
         } else {
@@ -446,9 +433,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         }
         hevm.warp(2 days); // Advance to the future
 
-        helper_changeRedemptionPrice(1400000000 ether); // Making RAI a bit more expensive
+        helper_changeRedemptionPrice(2500000000 ether); // Making RAI a bit more expensive
 
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
         if (newLower > 0) {
             emit log_named_uint("pos newLower", helper_getAbsInt24(newLower));
         } else {
@@ -471,7 +459,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint128 _liquidity, , , , ) = pool.positions(init_id);
         assertTrue(_liquidity == 0); //We should have burned the whole old position
 
-        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
+        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity,) = manager.position();
 
         emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
         emit log_named_uint("init_uniLiquidity", init_uniLiquidity);
@@ -492,7 +480,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(1); // Starting with a bit of liquidity
 
         uint256 liq = manager.balanceOf(address(u1));
-        (bytes32 inti_id, , , uint128 inti_uniLiquidity) = manager.position();
+        (bytes32 inti_id, , , uint128 inti_uniLiquidity,) = manager.position();
         (uint128 _li, , , , ) = pool.positions(inti_id);
 
         assertTrue(liq == _li);
@@ -504,17 +492,17 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
         emit log_named_uint("bal0", liq / 2);
         emit log_named_uint("bal1", manager.balanceOf(address(u1)));
-        assertTrue(manager.balanceOf(address(u1)) == liq / 2);
+        assertTrue(manager.balanceOf(address(u1)) - 1== liq / 2);
 
         (uint128 _li2, , , , ) = pool.positions(inti_id);
         emit log_named_uint("_li2", _li2);
         emit log_named_uint("_li / 2", _li / 2);
-        assertTrue(_li2 == _li / 2);
+        assertTrue(_li2 - 1== _li / 2);
 
-        (bytes32 end_id, , , uint128 end_uniLiquidity) = manager.position();
+        (bytes32 end_id, , , uint128 end_uniLiquidity,) = manager.position();
         emit log_named_uint("inti_uniLiquidity", inti_uniLiquidity / 2);
         emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
-        assertTrue(end_uniLiquidity == inti_uniLiquidity / 2);
+        assertTrue(end_uniLiquidity -1 == inti_uniLiquidity / 2);
     }
 
     function testFail_withdrawing_zero_liq() public {
@@ -546,7 +534,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testWeth), address(manager), wethAmount);
 
         (uint160 price1, , , , , , ) = pool.slot0();
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
 
         uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
 
@@ -570,7 +559,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("price1", price1);
         emit log_named_uint("price2", price2);
 
-        (bytes32 id, , , ) = manager.position();
+        (bytes32 id, , , ,) = manager.position();
         (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(id);
 
         emit log_named_uint("_liquidity", _liquidity);
@@ -579,7 +568,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("tokensOwed0", tokensOwed0);
         emit log_named_uint("tokensOwed1", tokensOwed1);
 
-        assertTrue(bal1w > bal0w);
+        assertTrue(bal1r > bal0r);
     }
 
     function test_multiple_users_depositing() public {
@@ -608,18 +597,18 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         helper_addLiquidity(1);
 
         // Make RAI twice more expensive
-        helper_changeRedemptionPrice(2000000000 ether);
+        helper_changeRedemptionPrice(6000000000 ether);
 
         // Add some liquidity
         helper_addLiquidity(1);
 
         // Return to the original price
-        helper_changeRedemptionPrice(1200000000 ether);
+        helper_changeRedemptionPrice(3000000000 ether);
         hevm.warp(2 days);
 
         manager.rebalance();
 
-        (bytes32 id, , , uint128 uniLiquidity1) = manager.position();
+        (bytes32 id, , , uint128 uniLiquidity1,) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(id);
         emit log_named_uint("_liquidity", _liquidity);
         emit log_named_uint("liq", uniLiquidity1);
@@ -636,7 +625,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u1.doApprove(address(testRai), address(manager), u1_raiAmount);
         u1.doApprove(address(testWeth), address(manager), u1_wethAmount);
 
-        (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
+        (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1,) = manager.position();
         (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, u1_wethAmount, u1_raiAmount);
 
@@ -646,7 +635,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
         // Getting new pool information
-        (, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2) = manager.position();
+        (, int24 lowerTick2, int24 upperTick2, uint128 uniLiquidity2,) = manager.position();
         assertTrue(uniLiquidity2 == uniLiquidity1 + u1_liquidity);
 
         // Pool position shouldn't have changed
@@ -654,7 +643,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         assertTrue(upperTick == upperTick2);
 
         // Make the redemption price change
-        helper_changeRedemptionPrice(800000000 ether);
+        helper_changeRedemptionPrice(3500000000 ether);
 
         uint256 u2_raiAmount = 5 ether;
         uint256 u2_wethAmount = 2 ether;
@@ -662,7 +651,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testRai), address(manager), u2_raiAmount);
         u2.doApprove(address(testWeth), address(manager), u2_wethAmount);
 
-        (int24 u2_lowerTick, int24 u2_upperTick, ) = manager.getNextTicks();
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 u2_lowerTick, int24 u2_upperTick, ) = manager.getNextTicks(__threshold);
         (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, u2_lowerTick, u2_upperTick, u2_wethAmount, u2_raiAmount);
 
@@ -686,12 +676,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         testWeth.approve(address(manager), 10);
         hevm.warp(2 days); // Advance to the future
 
-        helper_changeRedemptionPrice(800000000 ether);
-        (int24 lower, int24 upper, int24 price) = manager.getNextTicks();
+        helper_changeRedemptionPrice(2500000000 ether);
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 lower, int24 upper, int24 price) = manager.getNextTicks(__threshold);
 
         manager.rebalance();
 
-        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity) = manager.position();
+        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity,) = manager.position();
         assertTrue(lower == end_lowerTick);
         assertTrue(upper == end_upperTick);
     }
@@ -714,7 +705,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
 
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
-        assertTrue(sqrtRedPriceX96 == 140737488355); // Value taken from Uniswap SDK
+        assertTrue(sqrtRedPriceX96 == 10278012941177838); // Value taken from Uniswap SDK
     }
 
     function testFail_try_minting_zero_liquidity() public {

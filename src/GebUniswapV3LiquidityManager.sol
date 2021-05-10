@@ -10,8 +10,6 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
 
     // This contracts' position in the Uniswap V3 pool
     Position public position;
-    // Last price used for rebalancing
-    int24 lastRebalancePrice;
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -84,7 +82,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @dev In case of a multi-tranche scenario, rebalancing all tranches might be too expensive for the end user.
      *      A round robin could be done where, in each deposit, only one of the pool's positions is rebalanced
      */
-    function deposit(uint128 newLiquidity, address recipient) external returns (uint256 mintAmount) {
+    function deposit(uint128 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
 
 
@@ -113,7 +111,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(uint128 liquidityAmount, address recipient) external returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint128 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
        
@@ -132,7 +130,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     /**
      * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
-    function rebalance() external {
+    function rebalance() external override {
        require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
 
         int24 target= getTargetTick();
