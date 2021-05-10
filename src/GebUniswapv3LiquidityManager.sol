@@ -8,10 +8,6 @@ import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
-<<<<<<< HEAD
-abstract contract OracleLike {
-    function getResultsWithValidity() public virtual returns (uint256, uint256, bool);
-=======
 abstract contract OracleForUniswapLike {
     function getResultsWithValidity()
     public
@@ -21,7 +17,6 @@ abstract contract OracleForUniswapLike {
         uint256,
         bool
     );
->>>>>>> adjustments
 }
 
 
@@ -127,10 +122,6 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
 
-<<<<<<< HEAD
-=======
-
->>>>>>> adjustments
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
@@ -227,15 +218,9 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
-<<<<<<< HEAD
-          // If it's an invalid address, this tx will revert
-          (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
-          oracle = OracleLike(data);
-=======
             //If it's an ivalid addres, this tx will revert
             (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleForUniswapLike(data).getResultsWithValidity();
             oracle = OracleForUniswapLike(data);
->>>>>>> adjustments
         }
         emit ModifyParameters(parameter, data);
     }
