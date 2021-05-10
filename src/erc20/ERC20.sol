@@ -4,6 +4,7 @@ pragma solidity 0.6.7;
 
 import "./IERC20.sol";
 import "./SafeMath.sol";
+import "./SafeMath128.sol";
 
 /**
  * @dev Implementation of the {IERC20} interface.
@@ -30,7 +31,8 @@ import "./SafeMath.sol";
  * allowances. See {IERC20-approve}.
  */
 contract ERC20 is IERC20 {
-  using SafeMath for *;
+  using SafeMath for uint256;
+  using SafeMath128 for uint128;
 
   mapping(address => uint256) private _balances;
 
