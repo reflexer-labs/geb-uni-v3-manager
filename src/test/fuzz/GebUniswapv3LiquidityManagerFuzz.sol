@@ -22,11 +22,6 @@ contract Fuzzer is E2E_swap {
 
     constructor() public {}
 
-    // function init(uint128 rand) public {
-    //     _init(rand);
-    //     setUp();
-    // }
-
     // --- All Possible Actions ---
     function changeThreshold(uint256 val) public {
         if (!inited) {
@@ -169,7 +164,7 @@ contract Fuzzer is E2E_swap {
         (bytes32 posId, , , ) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(posId);
         if (manager.totalSupply() > 0) return (_liquidity > 0);
-        return true; //If there's no supply it's fine
+        return true; // If there's no supply it's fine
     }
 
     function echidna_id_integrity() public returns (bool) {
@@ -220,7 +215,7 @@ contract Fuzzer is E2E_swap {
         return t0_bal == 0 && t1_bal == 0;
     }
 
-    function echidna_manager_doesnt_have_position_if_supply_is_zero() public returns (bool) {
+    function echidna_manager_does_not_have_position_if_supply_is_zero() public returns (bool) {
         if (!inited) {
             return true;
         }
@@ -237,8 +232,8 @@ contract Fuzzer is E2E_swap {
     GebUniswapV3LiquidityManager public manager;
     OracleLikeMock oracle;
 
-    uint256 threshold = 420000; //40%
-    uint256 delay = 120 minutes; //10 minutes
+    uint256 threshold = 420000;  // 40%
+    uint256 delay = 120 minutes; // 10 minutes
 
     uint160 initialPoolPrice;
 

@@ -1,4 +1,4 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 import "../../lib/ds-test/src/test.sol";
 import "../GebUniswapv3LiquidityManager.sol";
@@ -18,8 +18,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     address token0;
     address token1;
 
-    uint256 threshold = 360000; //36%
-    uint256 delay = 120 minutes; //10 minutes
+    uint256 threshold = 360000;  // 36%
+    uint256 delay = 120 minutes; // 10 minutes
 
     uint160 initialPoolPrice;
 
@@ -46,8 +46,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
 
-        // We have to give an inital price to WETH 
-        // This meas 10:1 (10 RAI for 1 ETH)
+        // We have to give an inital price to WETH
+        // This means 10:1 (10 RAI for 1 ETH)
         // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
 
@@ -107,7 +107,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function helper_getRebalancePrice() public returns (uint160) {
-        // 1. Get prices from the oracle relayer
+        // 1. Get prices from the oracle
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
 
         // 2. Calculate the price ratio
@@ -356,17 +356,10 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         uint256 balance_u1 = manager.balanceOf(address(u1));
         emit log_named_uint("balance_u1", balance_u1); // 21316282116
 
-        // --- If one were to withdrawing ---
+        // --- If one were to withdraw ---
         (uint256 amount0, uint256 amount1) = manager.getTokenAmountsFromLiquidity(uint128(balance_u1));
         emit log_named_uint("amount0", amount0); // 2999999999751809927114
         emit log_named_uint("amount1", amount1); // 0
-
-        // --- Trying to do the reverse path ---
-        // uint128 liqFrom0 = manager.getLiquidityFromToken0(amount0); //Function copied from uniswap library
-        // uint128 liqFrom1 = manager.getLiquidityFromToken1(amount1); //Function copied from uniswap library
-
-        // emit log_named_uint("liqFrom0", liqFrom0); // 162 -- Very far from 21316282116, the original liquidity users had
-        // emit log_named_uint("liqFrom1", liqFrom1); // 0
 
         // We need some pool info
         (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1) = manager.position();
@@ -379,7 +372,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         // 2. With 1 for amount1
         uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, amount0, 1);
-        emit log_named_uint("u2_liquidity", u2_liquidity); // 21316282114 -> quite close from the inital liquidity
+        emit log_named_uint("u2_liquidity", u2_liquidity); // 21316282114 -> quite close to the inital liquidity amount
     }
 
     function test_adding_liquidity() public {
@@ -428,7 +421,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
     function test_rebalancing_pool() public {
         // Start with little liquidity
-        helper_addLiquidity(1); 
+        helper_addLiquidity(1);
         helper_addLiquidity(2);
         helper_addLiquidity(3);
 
@@ -453,7 +446,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         }
         hevm.warp(2 days); // Advance to the future
 
-        helper_changeRedemptionPrice(1400000000 ether); //Making RAI a bit more expensive
+        helper_changeRedemptionPrice(1400000000 ether); // Making RAI a bit more expensive
 
         (int24 newLower, int24 newUpper, ) = manager.getNextTicks();
         if (newLower > 0) {
@@ -468,7 +461,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
             emit log_named_uint("neg newUpper", helper_getAbsInt24(newUpper));
         }
 
-        // The lower bound might still be the same, since is current the MIN_TICK
+        // The lower bound might still be the same, since it's currently the MIN_TICK
         assertTrue(init_upperTick != newUpper);
 
         manager.rebalance();
@@ -487,16 +480,16 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function testFail_early_rebalancing() public {
-        hevm.warp(2 days); //Advance to the future
-        manager.rebalance(); // should pass
-        hevm.warp(2 minutes); //Advance to the future
-        manager.rebalance(); // should fail
+        hevm.warp(2 days);    // Advance to the future
+        manager.rebalance();  // Should pass
+        hevm.warp(2 minutes); // Advance to the future
+        manager.rebalance();  // Should fail
     }
 
     function test_withdrawing_liquidity() public {
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
-        helper_addLiquidity(1); //Starting with a bit of liquidity
+        helper_addLiquidity(1); // Starting with a bit of liquidity
 
         uint256 liq = manager.balanceOf(address(u1));
         (bytes32 inti_id, , , uint128 inti_uniLiquidity) = manager.position();
@@ -525,7 +518,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function testFail_withdrawing_zero_liq() public {
-        helper_addLiquidity(3); //Starting with a bit of liquidity
+        helper_addLiquidity(3); // Starting with a bit of liquidity
         u3.doWithdraw(0);
     }
 
@@ -536,7 +529,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     function test_collecting_fees() public {
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
         emit log_named_uint("redemptionPrice", redemptionPrice); // redemptionPrice: 1000000000000000000000000000
-        emit log_named_uint("ethUsdPrice", ethUsdPrice); // ethUsdPrice: 300000000000000000000
+        emit log_named_uint("ethUsdPrice", ethUsdPrice);         // ethUsdPrice: 300000000000000000000
 
         (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
         emit log_named_uint("price1", price0);
@@ -571,7 +564,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("bal0r", bal0r);
         emit log_named_uint("bal1w", bal1w);
         emit log_named_uint("bal1r", bal1r);
-        // Pretty hard to test this,tbh
+
         (uint160 price2, , , , , , ) = pool.slot0();
 
         emit log_named_uint("price1", price1);
@@ -590,15 +583,15 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_multiple_users_depositing() public {
-        helper_addLiquidity(1); //Starting with a bit of liquidity
+        helper_addLiquidity(1); // Starting with a bit of liquidity
         uint256 u1_balance = manager.balanceOf(address(u1));
         assert(u1_balance == manager.totalSupply());
 
-        helper_addLiquidity(2); //Starting with a bit of liquidity
+        helper_addLiquidity(2); // Starting with a bit of liquidity
         uint256 u2_balance = manager.balanceOf(address(u2));
         assert(u1_balance + u2_balance == manager.totalSupply());
 
-        helper_addLiquidity(3); //Starting with a bit of liquidity
+        helper_addLiquidity(3); // Starting with a bit of liquidity
         uint256 u3_balance = manager.balanceOf(address(u3));
         assert(u1_balance + u2_balance + u3_balance == manager.totalSupply());
     }
@@ -631,7 +624,8 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
         emit log_named_uint("_liquidity", _liquidity);
         emit log_named_uint("liq", uniLiquidity1);
         emit log_named_uint("bal", manager.balanceOf(address(u1)));
-        // user should be able to withdraw it's whole balance. Balance != Liquidity
+
+        // user should be able to withdraw their whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
     }
 
@@ -648,7 +642,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         u1.doDeposit(u1_liquidity);
 
-        // totalSupply should be equal both liquidities
+        // totalSupply should equal the sum of both liquidity amounts
         assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
 
         // Getting new pool information
@@ -676,7 +670,7 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
 
         emit log_named_uint("u2_upperTick", helper_getAbsInt24(u2_upperTick));
         emit log_named_uint("upperTick2", helper_getAbsInt24(upperTick2));
-        // totalSupply should be equal both liquidities
+        // totalSupply should be equal to the sum of the liquidity amounts
         assertTrue(manager.totalSupply() == u1_liquidity + u2_liquidity);
         assertTrue(u2_upperTick < upperTick2);
 
@@ -684,13 +678,13 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_getNextTicks_return_correctly() public {
-        helper_addLiquidity(1); //Starting with a bit of liquidity
-        helper_addLiquidity(2); //Starting with a bit of liquidity
-        helper_addLiquidity(3); //Starting with a bit of liquidity
+        helper_addLiquidity(1); // Starting with a bit of liquidity
+        helper_addLiquidity(2); // Starting with a bit of liquidity
+        helper_addLiquidity(3); // Starting with a bit of liquidity
 
         testRai.approve(address(manager), 10);
         testWeth.approve(address(manager), 10);
-        hevm.warp(2 days); //Advance to the future
+        hevm.warp(2 days); // Advance to the future
 
         helper_changeRedemptionPrice(800000000 ether);
         (int24 lower, int24 upper, int24 price) = manager.getNextTicks();
@@ -716,11 +710,11 @@ contract GebUniswapv3LiquidityManagerTest is DSTest {
     }
 
     function test_sqrt_conversion() public {
-        //Using uniswap sdk to arrive at those numbers
+        // Using the Uniswap SDK to arrive at those numbers
         (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
 
         uint160 sqrtRedPriceX96 = uint160(sqrt((ethUsdPrice * 2**96) / redemptionPrice));
-        assertTrue(sqrtRedPriceX96 == 140737488355); // Value taken from uniswap sdk
+        assertTrue(sqrtRedPriceX96 == 140737488355); // Value taken from Uniswap SDK
     }
 
     function testFail_try_minting_zero_liquidity() public {

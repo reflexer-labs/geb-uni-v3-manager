@@ -1,14 +1,14 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 contract PoolViewer {
     // --- Mint  ---
     /**
-     * @notice Helper function to simulate(non state-mutating) a mint action on a uniswap v3 pool
+     * @notice Helper function to simulate a mint action on a Uniswap v3 pool
      * @param pool The address of the target pool
      * @param recipient The address that will receive and pay for tokens
      * @param tickLower The lower bound of the range to deposit the liquidity to
      * @param tickUpper The upper bound of the range to deposit the liquidity to
-     * @param amount The uamount of liquidity to mint
+     * @param amount The amount of liquidity to mint
      * @param data The data for the callback function
      */
     function mintViewer(
@@ -34,7 +34,7 @@ contract PoolViewer {
 
     // --- Collect  ---
     /**
-     * @notice Helper function to simulate(non state-mutating) an action on a uniswap v3 pool
+     * @notice Helper function to simulate an action on a Uniswap v3 pool
      * @param pool The address of the target pool
      * @param recipient The address that will receive and pay for tokens
      * @param tickLower The lower bound of the range to deposit the liquidity to
@@ -66,7 +66,7 @@ contract PoolViewer {
 
     // --- Burn ---
     /**
-     * @notice Helper function to simulate(non state-mutating) an action on a uniswap v3 pool
+     * @notice Helper function to simulate(non state-mutating) an action on a Uniswap v3 pool
      * @param pool The address of the target pool
      * @param tickLower The lower bound of the uni v3 position
      * @param tickUpper The lower bound of the uni v3 position
