@@ -15,7 +15,7 @@ abstract contract OracleForUniswapLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-contract GebUniswapV3BaseManager is ERC20 {
+contract GebUniswapV3ManagerBase is ERC20 {
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -31,23 +31,17 @@ contract GebUniswapV3BaseManager is ERC20 {
     bool systemCoinIsT0;
 
     // --- Variables ---
-    // The threshold bounded by MIN_THRESHOLD(1000) and MIN_THRESHOLD(10000000), meaning that 1000 = 0.1% and 10000000 = 100%.
-    // uint256 public threshold;
     // The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
     uint256 public delay;
     // The timestamp of the last rebalance
     uint256 public lastRebalance;
-    // The last used price for rebalance
-    int24 public lastRebalancePrice;
-    // Collateral whose price to read from the oracle relayer
-    bytes32 public collateralType;
 
 
     // --- External Contracts ---
     // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
     // Address of oracle relayer to get prices from
-    OracleLike public oracle;
+    OracleForUniswapLike public oracle;
     // Address of contract that allows simulating pool fuctions
     PoolViewer public poolViewer;
 
@@ -119,8 +113,6 @@ contract GebUniswapV3BaseManager is ERC20 {
      * @param name_ The name of the ERC20 this contract will distribute
      * @param symbol_ The symbol of the ERC20 this contract will distribute
      * @param systemCoinAddress_ The address of the system coin
-     * @param threshold_1 The liquidity threshold around the redemption price
-     * @param threshold_2 The liquidity threshold around the redemption price
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both prices
@@ -129,16 +121,11 @@ contract GebUniswapV3BaseManager is ERC20 {
       string memory name_,
       string memory symbol_,
       address systemCoinAddress_,
-      uint256 threshold_1,
-      uint256 threshold_2,
       uint256 delay_,
       address pool_,
-      bytes32 collateralType_,
-      OracleLike oracle_,
+      OracleForUniswapLike oracle_,
       PoolViewer poolViewer_
     ) public ERC20(name_, symbol_) {
-        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
-        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
         authorizedAccounts[msg.sender] = 1;
@@ -153,9 +140,6 @@ contract GebUniswapV3BaseManager is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
-        require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
-
         MIN_TICK = -887272 - (-887272 % tickSpacing);
         MAX_TICK = 887272 - (887272 % tickSpacing);
 
@@ -163,7 +147,6 @@ contract GebUniswapV3BaseManager is ERC20 {
         // threshold = threshold_;
         delay = delay_;
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
-        collateralType = collateralType_;
         oracle = oracle_;
         poolViewer = poolViewer_;
     }
@@ -194,11 +177,7 @@ contract GebUniswapV3BaseManager is ERC20 {
      * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
-        if (parameter == "threshold") {
-          require(data > MIN_THRESHOLD && data < MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
-          require(data % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
-          // threshold = data;
-        } else if (parameter == "delay") {
+        if (parameter == "delay") {
           require(data >= MIN_DELAY && data <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
           delay = data;
         } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
@@ -214,8 +193,8 @@ contract GebUniswapV3BaseManager is ERC20 {
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
           // If it's an invalid address, this tx will revert
-          (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
-          oracle = OracleLike(data);
+          (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleForUniswapLike(data).getResultsWithValidity();
+          oracle = OracleForUniswapLike(data);
         }
 
         emit ModifyParameters(parameter, data);
