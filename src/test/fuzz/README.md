@@ -77,7 +77,7 @@ echidna_select_ticks_correctly: failed!💥
 
 echidna_position_integrity: passed! 🎉
 echidna_manager_never_owns_tokens: passed! 🎉
-echidna_manager_doesnt_have_position_if_supply_is_zero: passed! 🎉
+echidna_manager_does_not_have_position_if_supply_is_zero: passed! 🎉
 echidna_supply_integrity: passed! 🎉
 echidna_id_integrity: passed! 🎉
 echidna_always_has_a_position: passed! 🎉
@@ -103,7 +103,7 @@ However, the failure can happen from changing the `threshold` but not performing
 echidna_select_ticks_correctly: passed! 🎉
 echidna_position_integrity: passed! 🎉
 echidna_manager_never_owns_tokens: passed! 🎉
-echidna_manager_doesnt_have_position_if_supply_is_zero: passed! 🎉
+echidna_manager_does_not_have_position_if_supply_is_zero: passed! 🎉
 echidna_supply_integrity: passed! 🎉
 echidna_id_integrity: passed! 🎉
 echidna_always_has_a_position: passed! 🎉

@@ -1,4 +1,5 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
+
 import "../GebUniswapv3LiquidityManager.sol";
 
 contract OracleLikeMock is OracleLike {
