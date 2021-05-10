@@ -8,9 +8,22 @@ import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
+<<<<<<< HEAD
 abstract contract OracleLike {
     function getResultsWithValidity() public virtual returns (uint256, uint256, bool);
+=======
+abstract contract OracleForUniswapLike {
+    function getResultsWithValidity()
+    public
+    virtual
+    returns (
+        uint256,
+        uint256,
+        bool
+    );
+>>>>>>> adjustments
 }
+
 
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
@@ -78,7 +91,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     // Address of the Uniswap v3 pool
     IUniswapV3Pool public pool;
     // Address of the oracle contract to get token prices from
-    OracleLike public oracle;
+    OracleForUniswapLike public oracle;
     // Address of contract that allows pool fuction simulations
     PoolViewer public poolViewer;
 
@@ -114,6 +127,10 @@ contract GebUniswapV3LiquidityManager is ERC20 {
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> adjustments
     /**
      * @notice Constructor that sets initial parameters for this contract
      * @param name_ The name of the ERC20 this contract will distribute
@@ -132,7 +149,7 @@ contract GebUniswapV3LiquidityManager is ERC20 {
         uint256 delay_,
         address pool_,
         bytes32 collateralType_,
-        OracleLike oracle_,
+        OracleForUniswapLike oracle_,
         PoolViewer poolViewer_
     ) public ERC20(name_, symbol_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-threshold");
@@ -210,9 +227,15 @@ contract GebUniswapV3LiquidityManager is ERC20 {
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
+<<<<<<< HEAD
           // If it's an invalid address, this tx will revert
           (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleLike(data).getResultsWithValidity();
           oracle = OracleLike(data);
+=======
+            //If it's an ivalid addres, this tx will revert
+            (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleForUniswapLike(data).getResultsWithValidity();
+            oracle = OracleForUniswapLike(data);
+>>>>>>> adjustments
         }
         emit ModifyParameters(parameter, data);
     }

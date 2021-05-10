@@ -2,7 +2,7 @@ pragma solidity 0.6.7;
 
 import "../GebUniswapv3LiquidityManager.sol";
 
-contract OracleLikeMock is OracleLike {
+contract OracleLikeMock is OracleForUniswapLike {
     // Virtual redemption price (not the most updated value)
     uint256 internal _redemptionPrice; // [ray]
 
