@@ -2,7 +2,6 @@ pragma solidity 0.6.7;
 
 import "./GebUniswapV3ManagerBase.sol";
 
-
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
