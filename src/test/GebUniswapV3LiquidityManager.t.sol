@@ -46,9 +46,6 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         // Deploy Pool
         pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 3000));
 
-        // We have to give an inital price to WETH
-        // This means 10:1 (10 RAI for 1 ETH)
-        // This number is the sqrt of the price = sqrt(0.1) multiplied by 2 ** 96
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracle, pv);
 
         //Will initialize the pool with current price
@@ -71,19 +68,7 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         helper_addWhaleLiquidity();
     }
 
-    // --- Math ---
-    function sqrt(uint256 y) public pure returns (uint256 z) {
-        if (y > 3) {
-            z = y;
-            uint256 x = y / 2 + 1;
-            while (x < z) {
-                z = x;
-                x = (y / x + x) / 2;
-            }
-        } else if (y != 0) {
-            z = 1;
-        }
-    }
+    
 
     // --- Helpers ---
     function helper_deployV3Pool(
@@ -183,8 +168,8 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
     function helper_do_swap() public {
         (uint160 currentPrice, , , , , , ) = pool.slot0();
-        uint160 sqrtLimitPrice = currentPrice - 1000;
-        pool.swap(address(this), true, 10 ether, sqrtLimitPrice, bytes(""));
+        uint160 sqrtLimitPrice = currentPrice + 100000;
+        pool.swap(address(this), false, 100 ether, sqrtLimitPrice, bytes(""));
     }
 
     function helper_get_random_zeroForOne_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
@@ -199,6 +184,13 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         (uint160 currentPrice, , , , , , ) = pool.slot0();
         uint160 maximumPrice = TickMath.MAX_SQRT_RATIO;
         sqrtPriceLimitX96 = currentPrice + uint160((uint256(_amountSpecified > 0 ? _amountSpecified : -_amountSpecified) % (maximumPrice - currentPrice)));
+    }
+
+    function helper_assert_is_close(uint256 val1, uint256 val2) internal {
+        bool eq = val1 == val2;
+        bool bg = val1 + 1 == val2;
+        bool sm = val1 - 1 == val2;
+        assertTrue(eq || bg || sm); 
     }
 
     function uniswapV3MintCallback(
@@ -326,8 +318,6 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         } else {
             emit log_named_uint("neg",helper_getAbsInt24(t) );
         }
-
-        assertTrue(false);
     }
 
     function test_get_next_ticks() public {
@@ -536,19 +526,18 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
         // Withdraw half of the liquidity
         (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
-        emit log_named_uint("bal0", liq / 2);
-        emit log_named_uint("bal1", manager.balanceOf(address(u1)));
-        assertTrue(manager.balanceOf(address(u1))== liq / 2);
+        
+        helper_assert_is_close(manager.balanceOf(address(u1)), liq / 2);
 
         (uint128 _li2, , , , ) = pool.positions(inti_id);
         emit log_named_uint("_li2", _li2);
         emit log_named_uint("_li / 2", _li / 2);
-        assertTrue(_li2== _li / 2);
+        helper_assert_is_close(_li2, liq / _li);
 
         (bytes32 end_id, , , uint128 end_uniLiquidity,) = manager.position();
         emit log_named_uint("inti_uniLiquidity", inti_uniLiquidity / 2);
         emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
-        assertTrue(end_uniLiquidity == inti_uniLiquidity / 2);
+        helper_assert_is_close(end_uniLiquidity, inti_uniLiquidity / 2);
     }
 
     function testFail_withdrawing_zero_liq() public {
@@ -560,18 +549,10 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         manager.uniswapV3MintCallback(0, 0, "");
     }
 
-    function test_collecting_fees() public {
-        (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
-        emit log_named_uint("redemptionPrice", redemptionPrice); // redemptionPrice: 1000000000000000000000000000
-        emit log_named_uint("ethUsdPrice", ethUsdPrice);         // ethUsdPrice: 300000000000000000000
-
+    function test_single_collecting_fees() public {
         (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
-        emit log_named_uint("price1", price0);
-        if (tick0 > 0) {
-            emit log_named_uint("pos tick0", helper_getAbsInt24(tick0));
-        } else {
-            emit log_named_uint("neg tick0", helper_getAbsInt24(tick0));
-        }
+        emit log_named_uint("price0", price0);
+        helper_logTick(tick0);
 
         uint256 wethAmount = 1 ether;
         uint256 raiAmount = 10 ether;
@@ -579,11 +560,10 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         u2.doApprove(address(testRai), address(manager), raiAmount);
         u2.doApprove(address(testWeth), address(manager), wethAmount);
 
-        (uint160 price1, , , , , , ) = pool.slot0();
         (,,,,uint256 __threshold) = manager.position();
         (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
 
-        uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
+        uint128 liq = helper_getLiquidityAmountsForTicks(price0, newLower, newUpper, 1 ether, 10 ether);
 
         uint256 bal0w = testWeth.balanceOf(address(u2));
         uint256 bal0r = testRai.balanceOf(address(u2));
@@ -591,7 +571,6 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
         helper_do_swap();
         
-
         u2.doWithdraw(liq);
 
         uint256 bal1w = testWeth.balanceOf(address(u2));
@@ -601,19 +580,10 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         emit log_named_uint("bal1w", bal1w);
         emit log_named_uint("bal1r", bal1r);
 
-        (uint160 price2, , , , , , ) = pool.slot0();
+        (uint160 price2,int24 tick2 , , , , , ) = pool.slot0();
 
-        emit log_named_uint("price1", price1);
         emit log_named_uint("price2", price2);
-
-        (bytes32 id, , , ,) = manager.position();
-        (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(id);
-
-        emit log_named_uint("_liquidity", _liquidity);
-        emit log_named_uint("feeGrowthInside0LastX128", feeGrowthInside0LastX128);
-        emit log_named_uint("feeGrowthInside1LastX128", feeGrowthInside1LastX128);
-        emit log_named_uint("tokensOwed0", tokensOwed0);
-        emit log_named_uint("tokensOwed1", tokensOwed1);
+        helper_logTick(tick2);
 
         assertTrue(bal1r > bal0r);
     }
