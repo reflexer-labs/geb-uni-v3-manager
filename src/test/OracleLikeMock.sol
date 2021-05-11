@@ -1,8 +1,8 @@
 pragma solidity 0.6.7;
 
-import "../GebUniswapv3LiquidityManager.sol";
+import "../GebUniswapV3ManagerBase.sol";
 
-contract OracleLikeMock is OracleLike {
+contract OracleLikeMock is OracleForUniswapLike {
     // Virtual redemption price (not the most updated value)
     uint256 internal _redemptionPrice; // [ray]
 
@@ -10,8 +10,8 @@ contract OracleLikeMock is OracleLike {
     uint256 internal _collateralPrice; // [ray]
 
     constructor() public {
-        _collateralPrice = 300 ether;
-        _redemptionPrice = 1200000000 ether;
+        _collateralPrice = 4000000000000 ether;
+        _redemptionPrice = 3000000000 ether;
     }
 
     /**
