@@ -18,7 +18,7 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
     address token0;
     address token1;
 
-    uint256 threshold = 200000;  // 20%
+    uint256 threshold = 200040;  // 20%
     uint256 delay = 120 minutes; // 10 minutes
 
     uint160 initialPoolPrice;
@@ -44,7 +44,7 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         pv = new PoolViewer();
 
         // Deploy Pool
-        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 500));
+        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 3000));
 
         // We have to give an inital price to WETH
         // This means 10:1 (10 RAI for 1 ETH)
@@ -308,6 +308,7 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         uint pri = ((tokenPrice * scale / redemptionPrice) << 192) / scale;
 
         emit log_named_uint("lar",uint256(0-1));
+        emit log_named_uint("lar",uint128(0-1));
         emit log_named_uint("num",num);
         emit log_named_uint("den",den );
         emit log_named_uint("pri",pri );
@@ -315,6 +316,8 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
         uint160 p = uint160(sqrt(pri));
         emit log_named_uint("p",p );
+        //11579208923731619542357098500868790785 3269984665640564039457584007913129639935
+        //340282366920938463463374607431768211455
 
 
         int24 t = TickMath.getTickAtSqrtRatio(p);
@@ -323,6 +326,8 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         } else {
             emit log_named_uint("neg",helper_getAbsInt24(t) );
         }
+
+        assertTrue(false);
     }
 
     function test_get_next_ticks() public {

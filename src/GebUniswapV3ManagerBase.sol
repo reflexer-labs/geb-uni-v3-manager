@@ -199,9 +199,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     }
 
     // --- Virtual functions  ---
-    function deposit(uint128 newLiquidity, address recipient) external virtual returns (uint256 mintAmount);
-     function withdraw(uint128 liquidityAmount, address recipient) external virtual returns (uint256 amount0, uint256 amount1);
-     function rebalance() external virtual;
+    function deposit(uint256 newLiquidity, address recipient) external virtual returns (uint256 mintAmount);
+    function withdraw(uint256 liquidityAmount, address recipient) external virtual returns (uint256 amount0, uint256 amount1);
+    function rebalance() external virtual;
 
     // --- Getters ---
     /**

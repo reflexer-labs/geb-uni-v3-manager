@@ -44,8 +44,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_) {
         require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
         require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
-        
-        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
+
+        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold2");
         require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
 
         require(ratio_1.add(ratio_2) == 100,"GebUniswapv3LiquidityManager/invalid-ratios");
@@ -73,7 +73,6 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
           threshold: threshold_2
         });
     }
-
 
     // --- Helper ---
     function getAmountFromRatio(uint128 _amount, uint128 _ratio) internal pure returns (uint128){
@@ -126,14 +125,16 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
      *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
-    function deposit(uint128 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
+    function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
+        require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
+
 
         uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
         int24 target= getTargetTick();
 
-        uint256 mint1 = _deposit(positions[0], getAmountFromRatio(newLiquidity, ratio1), target);
-        uint256 mint2 = _deposit(positions[1], getAmountFromRatio(newLiquidity, ratio2), target);
+        uint256 mint1 = _deposit(positions[0], getAmountFromRatio(uint128(newLiquidity), ratio1), target);
+        uint256 mint2 = _deposit(positions[1], getAmountFromRatio(uint128(newLiquidity), ratio2), target);
 
         mintAmount = mint1 + mint2;
 
@@ -141,7 +142,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         if (__supply == 0) {
           mintAmount = newLiquidity;
         } else {
-          mintAmount = uint256(newLiquidity).mul(_totalSupply).div(totalLiquidity);
+          mintAmount = newLiquidity.mul(_totalSupply).div(totalLiquidity);
         }
 
           _mint(recipient, mintAmount);
@@ -157,19 +158,19 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(uint128 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint256 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
 
-        uint128 __supply = uint128(_totalSupply);
-        require(_totalSupply < uint128(0 - 1));
+        uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
         uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
 
-        uint128 _liquidityBurned = liquidityAmount.mul(totalLiquidity).div(__supply);
+        uint256 _liquidityBurned = liquidityAmount.mul(totalLiquidity).div(__supply);
+        require(_liquidityBurned < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
 
-        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], getAmountFromRatio(_liquidityBurned, ratio1), recipient);
-        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], getAmountFromRatio(_liquidityBurned, ratio2), recipient);
+        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], getAmountFromRatio(uint128(_liquidityBurned), ratio1), recipient);
+        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], getAmountFromRatio(uint128(_liquidityBurned), ratio2), recipient);
 
         (amount0, amount1) = (am0_pos0.add(am0_pos1), am1_pos0.add(am1_pos1));
         emit Withdraw(msg.sender, recipient, liquidityAmount);

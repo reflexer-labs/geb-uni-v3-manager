@@ -81,21 +81,22 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @dev In case of a multi-tranche scenario, rebalancing all tranches might be too expensive for the end user.
      *      A round robin could be done where, in each deposit, only one of the pool's positions is rebalanced
      */
-    function deposit(uint128 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
+    function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
+        require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
 
 
         uint128 totalLiquidity = position.uniLiquidity;
         int24 target= getTargetTick();
 
-        mintAmount = _deposit(position, newLiquidity, target);
+        mintAmount = _deposit(position, uint128(newLiquidity), target);
 
         // Calculate and mint a user's ERC20 liquidity tokens
         uint256 __supply = _totalSupply;
         if (__supply == 0) {
             mintAmount = newLiquidity;
         } else {
-            mintAmount = uint256(newLiquidity).mul(_totalSupply).div(totalLiquidity);
+            mintAmount = newLiquidity.mul(_totalSupply).div(totalLiquidity);
         }
 
         _mint(recipient, uint256(mintAmount));
@@ -110,19 +111,18 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @return amount0 The amount of token0 requested from the pool
      * @return amount1 The amount of token1 requested from the pool
      */
-    function withdraw(uint128 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
+    function withdraw(uint256 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
        
-        uint128 __supply = uint128(_totalSupply);
-        require(_totalSupply < uint128(0 - 1));
-        
+        uint256 __supply = _totalSupply;        
         // Burn sender tokens
         _burn(msg.sender, uint256(liquidityAmount));
 
-        uint128 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
+        uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
+        require(_liquidityBurned < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
 
-        (amount0, amount1) = _withdraw(position, _liquidityBurned, recipient);
+        (amount0, amount1) = _withdraw(position, uint128(_liquidityBurned), recipient);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
