@@ -382,6 +382,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         _position.uniLiquidity = _liquidity;
     }
 
+    event DE(uint128 ow);
+    event GR(uint256 ow);
     /**
      * @notice Helper function to burn a position
      * @param _lowerTick The lower bound of the range to deposit the liquidity to
@@ -398,12 +400,30 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         uint128 _burnedLiquidity,
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
-        // Amount owed might be more than requested. What do we do?
+        (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(_position.id);
+        emit GR(feeGrowthInside0LastX128);
+        emit GR(feeGrowthInside1LastX128);
+        emit DE(tokensOwed0);
+        emit DE(tokensOwed1);
+
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
+
+        ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
+        emit GR(feeGrowthInside0LastX128);
+        emit GR(feeGrowthInside1LastX128);
+        emit DE(tokensOwed0);
+        emit DE(tokensOwed1);
+
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
+         ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
+        emit GR(feeGrowthInside0LastX128);
+        emit GR(feeGrowthInside1LastX128);
+        emit DE(tokensOwed0);
+        emit DE(tokensOwed1);
+        
         // Update position. All other factors are still the same
-        (uint128 _liquidity, , , , ) = pool.positions(_position.id);
+        ( _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
 

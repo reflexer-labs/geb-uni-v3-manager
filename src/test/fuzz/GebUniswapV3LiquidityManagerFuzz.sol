@@ -20,6 +20,8 @@ import "./uniswap/E2E_swap.sol";
 contract Fuzzer is E2E_swap {
     using SafeMath for uint256;
 
+
+    int24 lastRebalancePrice;
     constructor() public {}
 
     // --- All Possible Actions ---
@@ -34,6 +36,7 @@ contract Fuzzer is E2E_swap {
 
     function rebalancePosition() public {
         require(inited);
+        lastRebalancePrice = manager.getTargetTick();
         manager.rebalance();
     }
 
@@ -179,16 +182,11 @@ contract Fuzzer is E2E_swap {
     event DC(int24 l);
 
     function echidna_select_ticks_correctly() public returns (bool) {
-        // if (!inited) {
-        //     return true;
-        // }
-        // int24 tickPrice = manager.lastRebalancePrice();
-        // uint256 _threshold = manager.threshold();
-        // (bytes32 posId, int24 lower, int24 upper, ) = manager.position();
-        // emit DC(tickPrice);
-        // emit DC(lower);
-        // emit DC(upper);
-        // return (lower + int24(_threshold) >= tickPrice && upper - int24(_threshold) <= tickPrice);
+        if (!inited) {
+            return true;
+        }
+        (bytes32 posId, int24 lower, int24 upper, ,uint256 _threshold) = manager.position();
+        return (lower + int24(_threshold) >= lastRebalancePrice && upper - int24(_threshold) <= lastRebalancePrice);
     }
 
     function echidna_supply_integrity() public returns (bool) {
