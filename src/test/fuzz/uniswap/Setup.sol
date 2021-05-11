@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "../../TestHelpers.sol";
 import "../../../uni/UniswapV3Pool.sol";
+import "../../../GebUniswapV3LiquidityManager.sol";
 import "../../../uni/UniswapV3Factory.sol";
 
 contract SetupTokens {

@@ -1,7 +1,7 @@
 pragma solidity 0.6.7;
 
 import "../../lib/ds-test/src/test.sol";
-import "../GebUniswapv3LiquidityManager.sol";
+import "../GebUniswapV3ManagerBase.sol";
 import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
 import "../erc20/ERC20.sol";
@@ -32,13 +32,13 @@ abstract contract Hevm {
 }
 
 contract PoolUser {
-    GebUniswapV3LiquidityManager manager;
+    GebUniswapV3ManagerBase manager;
     TestToken rai;
     TestToken weth;
     UniswapV3Pool pool;
 
     constructor(
-        GebUniswapV3LiquidityManager man,
+        GebUniswapV3ManagerBase man,
         UniswapV3Pool _pool,
         TestToken _r,
         TestToken _w
