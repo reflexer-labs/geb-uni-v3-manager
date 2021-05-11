@@ -57,8 +57,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     // 1 hour is the absolute minimum delay for a rebalance. Could be less through deposits
     uint256 constant MIN_DELAY = 60 minutes;
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
-    int24 public constant MAX_TICK = 887270;
-    int24 public constant MIN_TICK = -887270;
+    int24 public constant MAX_TICK = 887220;
+    int24 public constant MIN_TICK = -887220;
 
     // --- Struct ---
     struct Position {
@@ -232,10 +232,11 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
 
         // 2. Calculate the price ratio
         uint160 sqrtPriceX96;
-        if (!systemCoinIsT0) {
-          sqrtPriceX96 = uint160(sqrt((redemptionPrice << 96) / ethUsdPrice));
+        uint256 scale = 1000000000;
+        if (systemCoinIsT0) {
+          sqrtPriceX96 = uint160(sqrt((redemptionPrice.mul(scale).div(ethUsdPrice) << 192) / scale));
         } else {
-          sqrtPriceX96 = uint160(sqrt((ethUsdPrice << 96) / redemptionPrice));
+          sqrtPriceX96 = uint160(sqrt((ethUsdPrice.mul(scale).div(redemptionPrice) << 192) / scale));
         }
 
         // 3. Calculate the tick that the ratio is at
@@ -438,3 +439,5 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         }
     }
 }
+
+// "GebUniswapManager","GUM","0x76b06a2f6dF6f0514e7BEC52a9AfB3f603b477CD","200040","240","0xe25df12aa3d86118e5fcfd6cf573fba7648a2f2d ","0x652a70e9f744b46d916afa46abdd42bcb1b6ebe9","0xb9516057dc40c92f91b6ebb2e3d04288cd0446f1 "

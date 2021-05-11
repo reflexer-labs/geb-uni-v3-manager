@@ -249,7 +249,7 @@ contract Fuzzer is E2E_swap {
         oracle = new OracleLikeMock();
         pv = new PoolViewer();
 
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), bytes32("ETH"), oracle, pv);
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), oracle, pv);
 
         u1 = new FuzzUser(manager, token0, token1);
         u2 = new FuzzUser(manager, token0, token1);
