@@ -129,14 +129,11 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
 
-
-        uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
+        uint128 totalLiquidity = positions[0].uniLiquidity.add(positions[1].uniLiquidity);
         int24 target= getTargetTick();
 
-        uint256 mint1 = _deposit(positions[0], getAmountFromRatio(uint128(newLiquidity), ratio1), target);
-        uint256 mint2 = _deposit(positions[1], getAmountFromRatio(uint128(newLiquidity), ratio2), target);
-
-        mintAmount = mint1 + mint2;
+        _deposit(positions[0], getAmountFromRatio(uint128(newLiquidity), ratio1), target);
+        _deposit(positions[1], getAmountFromRatio(uint128(newLiquidity), ratio2), target);
 
         uint256 __supply = _totalSupply;
         if (__supply == 0) {
@@ -164,7 +161,6 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
 
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
-        uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
 
         uint256 _liquidityBurned0 = liquidityAmount.mul(positions[0].uniLiquidity).div(__supply);
         require(_liquidityBurned0 < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
