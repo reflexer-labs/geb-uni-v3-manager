@@ -73,7 +73,6 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         if (_liquidity == 0) return 0;
         (, amount1) = _getTokenAmountsFromLiquidity(position, _liquidity);
     }
-    event M(uint256 l);
 
     /**
      * @notice Add liquidity to this pool manager
@@ -83,7 +82,6 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      *      A round robin could be done where, in each deposit, only one of the pool's positions is rebalanced
      */
     function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
-        emit M(222); 
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
 
