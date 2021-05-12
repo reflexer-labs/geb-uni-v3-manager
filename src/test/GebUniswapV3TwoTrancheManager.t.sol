@@ -223,6 +223,8 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         manager.uniswapV3MintCallback(0, 0, "");
     }
 
+
+    // Test not passing because swap is not accruing fees
     // function test_collecting_fees() public {
     //     (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
     //     emit log_named_uint("redemptionPrice", redemptionPrice); // redemptionPrice: 1000000000000000000000000000
