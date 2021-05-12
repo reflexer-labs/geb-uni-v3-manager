@@ -166,11 +166,14 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         _burn(msg.sender, liquidityAmount);
         uint128 totalLiquidity = positions[0].uniLiquidity + positions[1].uniLiquidity;
 
-        uint256 _liquidityBurned = liquidityAmount.mul(totalLiquidity).div(__supply);
-        require(_liquidityBurned < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
+        uint256 _liquidityBurned0 = liquidityAmount.mul(positions[0].uniLiquidity).div(__supply);
+        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
 
-        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], getAmountFromRatio(uint128(_liquidityBurned), ratio1), recipient);
-        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], getAmountFromRatio(uint128(_liquidityBurned), ratio2), recipient);
+        uint256 _liquidityBurned1 = liquidityAmount.mul(positions[1].uniLiquidity).div(__supply);
+        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
+
+        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], uint128(_liquidityBurned0), recipient);
+        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], uint128(_liquidityBurned1), recipient);
 
         (amount0, amount1) = (am0_pos0.add(am0_pos1), am1_pos0.add(am1_pos1));
         emit Withdraw(msg.sender, recipient, liquidityAmount);
