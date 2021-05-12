@@ -1,54 +1,21 @@
 pragma solidity 0.6.7;
-
-import "../../lib/ds-test/src/test.sol";
+import "./GebUniswapV3ManagerBaseTest.t.sol";
 import "../GebUniswapV3LiquidityManager.sol";
-import "../uni/UniswapV3Factory.sol";
-import "../uni/UniswapV3Pool.sol";
-import "./TestHelpers.sol";
-import "./OracleLikeMock.sol";
+contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
 
-contract GebUniswapV3LiquidityManagerTest is DSTest {
-    Hevm hevm;
+    uint256 threshold = 200040; //~20%
+    uint256 delay = 120 minutes;
 
     GebUniswapV3LiquidityManager manager;
-    UniswapV3Pool pool;
-    TestRAI testRai;
-    TestWETH testWeth;
-    OracleLikeMock oracle;
-    address token0;
-    address token1;
 
-    uint256 threshold = 200040;  // 20%
-    uint256 delay = 120 minutes; // 10 minutes
 
-    uint160 initialPoolPrice;
-
-    PoolUser u1;
-    PoolUser u2;
-    PoolUser u3;
-    PoolUser u4;
-
-    PoolUser[4] public users;
-    PoolViewer pv;
-
-    function setUp() public {
-        // Deploy GEB
-        hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
-        oracle = new OracleLikeMock();
-
-        // Deploy each token
-        testRai = new TestRAI("RAI");
-        testWeth = new TestWETH("WETH");
-        (token0, token1) = address(testRai) < address(testWeth) ? (address(testRai), address(testWeth)) : (address(testWeth), address(testRai));
-
-        pv = new PoolViewer();
-
-        // Deploy Pool
-        pool = UniswapV3Pool(helper_deployV3Pool(token0, token1, 3000));
-
+    // --- Test Setup ---
+    function setUp() override public {
+        super.setUp();
         manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracle, pv);
+        manager_base = GebUniswapV3ManagerBase(manager);
 
-        //Will initialize the pool with current price
+         //Will initialize the pool with current price
         initialPoolPrice = helper_getRebalancePrice();
         pool.initialize(initialPoolPrice);
 
@@ -63,136 +30,27 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         users[3] = u4;
 
         helper_transferToAdds(users);
-
-        // Make the pool start with some spread out liquidity
         helper_addWhaleLiquidity();
     }
 
-    
-
-    // --- Helpers ---
-    function helper_deployV3Pool(
-        address _token0,
-        address _token1,
-        uint256 fee
-    ) internal returns (address _pool) {
-        UniswapV3Factory fac = new UniswapV3Factory();
-        _pool = fac.createPool(token0, token1, uint24(fee));
-    }
-
-    function helper_changeRedemptionPrice(uint256 newPrice) public {
-        oracle.setSystemCoinPrice(newPrice);
-    }
-
-    function helper_transferToAdds(PoolUser[4] memory adds) public {
-        for (uint256 i = 0; i < adds.length; i++) {
-            testWeth.transfer(address(adds[i]), 30000 ether);
-            testRai.transfer(address(adds[i]), 120000000000 ether);
-        }
-    }
-
-    function helper_getRebalancePrice() public returns (uint160) {
-        // 1. Get prices from the oracle
-        (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
-
-        // 2. Calculate the price ratio
-        uint160 sqrtPriceX96;
-        if (!(address(pool.token0()) == address(testRai))) {
-            sqrtPriceX96 = uint160(sqrt((redemptionPrice << 96) / ethUsdPrice));
-        } else {
-            sqrtPriceX96 = uint160(sqrt((ethUsdPrice << 96) / redemptionPrice));
-        }
-        return sqrtPriceX96;
-    }
-
-    function helper_addWhaleLiquidity() public {
-        uint256 wethAmount = 300 ether;
-        uint256 raiAmount = 1200000000 ether;
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        // uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, -887220, 887220, wethAmount, raiAmount);
-        int24 low = -887220;
-        int24 upp = 887220;
-        pool.mint(address(this), low, upp, 1000000000, bytes(""));
-    }
-
+    // --- Helper ---
     function helper_addLiquidity(uint8 user) public {
-        (bytes32 i_id, , , uint128 i_uniLiquidity,uint256 threshold_) = manager.position();
-        (uint128 i_liquidity, , , , ) = pool.positions(i_id);
         PoolUser u = users[(user - 1) % 4];
-        uint256 wethAmount = 3000 ether;
-        uint256 raiAmount = 1000000 ether;
+        uint256 token0Amount = 3000 ether;
+        uint256 token1Amount = 3000 ether;
 
-        u.doApprove(address(testRai), address(manager), raiAmount);
-        u.doApprove(address(testWeth), address(manager), wethAmount);
+        u.doApprove(address(testRai), address(manager), token0Amount);
+        u.doApprove(address(testWeth), address(manager), token1Amount);
 
+        (, , , ,uint256 threshold_) = manager.position();
         (int24 newLower, int24 newUpper, ) = manager.getNextTicks(threshold_);
 
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, wethAmount, raiAmount);
+        uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, token0Amount, token1Amount);
         u.doDeposit(liq);
     }
 
-    function helper_getLiquidityAmountsForTicks(
-        uint160 sqrtRatioX96,
-        int24 _lowerTick,
-        int24 upperTick,
-        uint256 t0am,
-        uint256 t1am
-    ) public returns (uint128 liquidity) {
-        emit log_named_uint("am0", 22222);
-        liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtRatioX96,
-            TickMath.getSqrtRatioAtTick(_lowerTick),
-            TickMath.getSqrtRatioAtTick(upperTick),
-            t0am,
-            t1am
-        );
-        emit log_named_uint("am1", 22223);
-    }
-
-    function helper_getAbsInt24(int24 val) internal returns (uint256 abs) {
-        if (val > 0) {
-            abs = uint256(val);
-        } else {
-            abs = uint256(val * int24(-1));
-        }
-    }
-
-    function helper_logTick(int24 val) internal {
-        if(val > 0){
-            emit log_named_uint("pos",uint256(val) );
-        } else {
-            emit log_named_uint("neg",uint256(val * int24(-1)));
-        }
-    }
-
-    function helper_do_swap() public {
-        (uint160 currentPrice, , , , , , ) = pool.slot0();
-        uint160 sqrtLimitPrice = currentPrice + 100000;
-        pool.swap(address(this), false, 100 ether, sqrtLimitPrice, bytes(""));
-    }
-
-    function helper_get_random_zeroForOne_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
-        // help echidna a bit by calculating a valid sqrtPriceLimitX96 using the amount as random seed
-        (uint160 currentPrice, , , , , , ) = pool.slot0();
-        uint160 minimumPrice = TickMath.MIN_SQRT_RATIO;
-        sqrtPriceLimitX96 = minimumPrice + uint160((uint256(_amountSpecified > 0 ? _amountSpecified : -_amountSpecified) % (currentPrice - minimumPrice)));
-    }
-
-    function helper_get_random_oneForZero_priceLimit(int256 _amountSpecified) internal view returns (uint160 sqrtPriceLimitX96) {
-        // help echidna a bit by calculating a valid sqrtPriceLimitX96 using the amount as random seed
-        (uint160 currentPrice, , , , , , ) = pool.slot0();
-        uint160 maximumPrice = TickMath.MAX_SQRT_RATIO;
-        sqrtPriceLimitX96 = currentPrice + uint160((uint256(_amountSpecified > 0 ? _amountSpecified : -_amountSpecified) % (maximumPrice - currentPrice)));
-    }
-
-    function helper_assert_is_close(uint256 val1, uint256 val2) internal {
-        bool eq = val1 == val2;
-        bool bg = val1 + 1 == val2;
-        bool sm = val1 - 1 == val2;
-        assertTrue(eq || bg || sm); 
-    }
-
+    // --- Uniswap Callbacks ---
     function uniswapV3MintCallback(
         uint256 amount0Owed,
         uint256 amount1Owed,
@@ -207,15 +65,12 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         int256 amount1Delta,
         bytes calldata data
     ) external {
-        if (address(pool.token0()) == address(testRai)) {
-            if (amount0Delta > 0) testRai.transfer(msg.sender, uint256(amount0Delta));
-            if (amount1Delta > 0) testWeth.transfer(msg.sender, uint256(amount1Delta));
-        } else {
-            if (amount1Delta > 0) testRai.transfer(msg.sender, uint256(amount1Delta));
-            if (amount0Delta > 0) testWeth.transfer(msg.sender, uint256(amount0Delta));
-        }
+        if (amount1Delta > 0) token0.transfer(msg.sender, uint256(amount1Delta));
+        if (amount0Delta > 0) token1.transfer(msg.sender, uint256(amount0Delta));
+ 
     }
 
+    // --- Test Sanity Variables ---
     function test_sanity_uint_variables() public {
         uint256 _delay = manager.delay();
         assertTrue(_delay == delay);
@@ -240,14 +95,16 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
     function test_sanity_pool() public {
         address token0_ = pool.token0();
-        assertTrue(token0_ == token0);
+        assertTrue(token0_ == address(token0));
 
         address token1_ = pool.token1();
-        assertTrue(token1_ == token1);
+        assertTrue(token1_ == address(token1));
 
         (uint160 poolPrice_, , , , , , ) = pool.slot0();
         assertTrue(poolPrice_ == initialPoolPrice);
     }
+
+    // --- Test Modify Parameters ---
     function test_modify_delay() public {
         uint256 newDelay = 340 minutes;
         manager.modifyParameters(bytes32("delay"), newDelay);
@@ -271,53 +128,20 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
     }
 
     function testFail_thirdyParty_changingParameter() public {
-        bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,uint256)", bytes32("threshold"), 20000);
-        u1.doArbitrary(address(manager), data);
+        bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,uint256)", bytes32("delay"), 3605);
+        u1.doArbitrary(address(manager_base), data);
     }
 
     function testFail_thirdyParty_changingOracle() public {
         bytes memory data = abi.encodeWithSignature("modifyParameters(bytes32,address)", bytes32("oracle"), address(4));
-        u1.doArbitrary(address(manager), data);
+        u1.doArbitrary(address(manager_base), data);
     }
 
+    // --- Test Getters ---
     function test_get_prices() public {
         (uint256 redemptionPrice, uint256 tokenPrice) = manager.getPrices();
-        emit log_named_uint("redemptionPrice",redemptionPrice );
-        emit log_named_uint("tokenPrice",tokenPrice );
         assertTrue(redemptionPrice == 3000000000000000000000000000);
         assertTrue(tokenPrice == 4000000000000000000000000000000);
-
-        uint256 scale = 1000000000;
-
-        uint256 price = redemptionPrice * scale / tokenPrice;
-        emit log_named_uint("price",price );
-
-        uint a1 = price;
-        uint a0 = scale;
-
-        uint num = a1 << 192;
-        uint den = a0;
-        uint pri = ((tokenPrice * scale / redemptionPrice) << 192) / scale;
-
-        emit log_named_uint("lar",uint256(0-1));
-        emit log_named_uint("lar",uint128(0-1));
-        emit log_named_uint("num",num);
-        emit log_named_uint("den",den );
-        emit log_named_uint("pri",pri );
-
-
-        uint160 p = uint160(sqrt(pri));
-        emit log_named_uint("p",p );
-        //11579208923731619542357098500868790785 3269984665640564039457584007913129639935
-        //340282366920938463463374607431768211455
-
-
-        int24 t = TickMath.getTickAtSqrtRatio(p);
-        if(t > 0){
-            emit log_named_uint("pos",helper_getAbsInt24(t) );
-        } else {
-            emit log_named_uint("neg",helper_getAbsInt24(t) );
-        }
     }
 
     function test_get_next_ticks() public {
@@ -343,21 +167,6 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         assertTrue(tkn0Amt == amount0);
     }
 
-    function test_get_token0_from_liquidity_burning() public {
-        helper_addLiquidity(1);
-        helper_addLiquidity(2);
-        uint128 liq = uint128(manager.balanceOf(address(u2)));
-
-        uint256 tkn0Amt = manager.getToken0FromLiquidity(liq);
-        emit log_named_address("man", address(manager));
-
-        (uint256 amount0, ) = u2.doWithdraw(liq);
-
-        emit log_named_uint("tkn0Amt", tkn0Amt);
-        emit log_named_uint("amount0", amount0);
-        assertTrue(tkn0Amt == amount0);
-    }
-
     function test_get_token1_from_liquidity() public {
         helper_addLiquidity(1);
         helper_addLiquidity(2);
@@ -372,320 +181,7 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
         assertTrue(tkn1Amt == amount1);
     }
 
-    function test_example() public {
-        // --- User 1 deposits in pool ---
-        helper_addLiquidity(1);
-        uint256 balance_u1 = manager.balanceOf(address(u1));
-        emit log_named_uint("balance_u1", balance_u1); // 21316282116
-
-        // --- If one were to withdraw ---
-        (uint256 amount0, uint256 amount1) = manager.getTokenAmountsFromLiquidity(uint128(balance_u1));
-        emit log_named_uint("amount0", amount0); // 2999999999751809927114
-        emit log_named_uint("amount1", amount1); // 0
-
-        // We need some pool info
-        (bytes32 id, int24 lowerTick, int24 upperTick, uint128 uniLiquidity1,) = manager.position();
-        (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
-
-        // --- Trying again using both amounts---
-        // 1. With 0 for amount1
-        uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, amount0, amount1);
-        emit log_named_uint("u1_liquidity", u1_liquidity); // 0
-
-        // 2. With 1 for amount1
-        uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, lowerTick, upperTick, amount0, 1);
-        emit log_named_uint("u2_liquidity", u2_liquidity); // 21316282114 -> quite close to the inital liquidity amount
-    }
-
-    function test_adding_liquidity() public {
-        uint256 wethAmount = 1 ether;
-        uint256 raiAmount = 10 ether;
-
-        u1.doApprove(address(testRai), address(manager), raiAmount);
-        u1.doApprove(address(testWeth), address(manager), wethAmount);
-
-        (uint160 price1, , , , , , ) = pool.slot0();
-        (,,,,uint256 __threshold) = manager.position();
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
-
-        uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, 1 ether, 10 ether);
-        emit log_named_uint("liq", liq);
-
-        {
-            (int24 _nlower, int24 _nupper, ) = manager.getNextTicks(__threshold);
-
-            (uint160 currPrice, , , , , , ) = pool.slot0();
-            (uint256 amount0, ) =
-                LiquidityAmounts.getAmountsForLiquidity(currPrice, TickMath.getSqrtRatioAtTick(_nlower), TickMath.getSqrtRatioAtTick(_nupper), liq);
-
-            uint256 balBefore = testWeth.balanceOf(address(u1));
-
-            u1.doDeposit(liq);
-
-            uint256 balAfter = testWeth.balanceOf(address(u1));
-            emit log_named_uint("initEth", (balBefore - balAfter) / amount0);
-            assertTrue((balBefore - balAfter) / amount0 == 0);
-        }
-
-        (bytes32 id, , , uint128 uniLiquidity,) = manager.position();
-        (uint128 _liquidity, , , , ) = pool.positions(id);
-        assertTrue(uniLiquidity == _liquidity);
-
-        uint256 liquidityReceived = manager.totalSupply();
-        assertTrue(liquidityReceived == liq);
-
-        uint256 liqReceived = manager.balanceOf(address(u1));
-        assertTrue(liqReceived == liq);
-    }
-
-    function testFail_adding_zero_liquidity() public {
-        u2.doDeposit(0);
-    }
-
-    function test_rebalancing_pool() public {
-        // Start with little liquidity
-        helper_addLiquidity(1);
-        helper_addLiquidity(2);
-        helper_addLiquidity(3);
-
-        testRai.approve(address(manager), 10);
-        testWeth.approve(address(manager), 10);
-
-        (uint256 red, uint256 usd) = manager.getPrices();
-        emit log_named_uint("red", red);
-        emit log_named_uint("usd", usd);
-
-        (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity,) = manager.position();
-        if (init_lowerTick > 0) {
-            emit log_named_uint("pos init_lowerTick", helper_getAbsInt24(init_lowerTick));
-        } else {
-            emit log_named_uint("neg init_lowerTick", helper_getAbsInt24(init_lowerTick));
-        }
-
-        if (init_upperTick > 0) {
-            emit log_named_uint("pos init_upperTick", helper_getAbsInt24(init_upperTick));
-        } else {
-            emit log_named_uint("neg init_upperTick", helper_getAbsInt24(init_upperTick));
-        }
-        hevm.warp(2 days); // Advance to the future
-
-        helper_changeRedemptionPrice(2500000000 ether); // Making RAI a bit more expensive
-
-        (,,,,uint256 __threshold) = manager.position();
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
-        if (newLower > 0) {
-            emit log_named_uint("pos newLower", helper_getAbsInt24(newLower));
-        } else {
-            emit log_named_uint("neg newLower", helper_getAbsInt24(newLower));
-        }
-
-        if (newUpper > 0) {
-            emit log_named_uint("pos newUpper", helper_getAbsInt24(newUpper));
-        } else {
-            emit log_named_uint("neg newUpper", helper_getAbsInt24(newUpper));
-        }
-
-        // The lower bound might still be the same, since it's currently the MIN_TICK
-        assertTrue(init_upperTick != newUpper);
-
-        manager.rebalance();
-        // emit log_named_uint("am0", collected0);
-        // emit log_named_uint("am1", collected1);
-
-        (uint128 _liquidity, , , , ) = pool.positions(init_id);
-        assertTrue(_liquidity == 0); //We should have burned the whole old position
-
-        (bytes32 end_id, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity,) = manager.position();
-
-        emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
-        emit log_named_uint("init_uniLiquidity", init_uniLiquidity);
-        assertTrue(end_uniLiquidity <= init_uniLiquidity);
-        // assertTrue(false);
-    }
-
-    function testFail_early_rebalancing() public {
-        hevm.warp(2 days);    // Advance to the future
-        manager.rebalance();  // Should pass
-        hevm.warp(2 minutes); // Advance to the future
-        manager.rebalance();  // Should fail
-    }
-
-    function test_withdrawing_liquidity() public {
-        uint256 wethAmount = 1 ether;
-        uint256 raiAmount = 10 ether;
-        helper_addLiquidity(1); // Starting with a bit of liquidity
-
-        uint256 liq = manager.balanceOf(address(u1));
-        (bytes32 inti_id, , , uint128 inti_uniLiquidity,) = manager.position();
-        (uint128 _li, , , , ) = pool.positions(inti_id);
-
-        assertTrue(liq == _li);
-        emit log_named_uint("liq", liq);
-        emit log_named_uint("liq", inti_uniLiquidity);
-        emit log_named_uint("_li", _li);
-
-        // Withdraw half of the liquidity
-        (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
-        
-        helper_assert_is_close(manager.balanceOf(address(u1)), liq / 2);
-
-        (uint128 _li2, , , , ) = pool.positions(inti_id);
-        emit log_named_uint("_li2", _li2);
-        emit log_named_uint("_li / 2", _li / 2);
-        helper_assert_is_close(_li2, liq / _li);
-
-        (bytes32 end_id, , , uint128 end_uniLiquidity,) = manager.position();
-        emit log_named_uint("inti_uniLiquidity", inti_uniLiquidity / 2);
-        emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
-        helper_assert_is_close(end_uniLiquidity, inti_uniLiquidity / 2);
-    }
-
-    function testFail_withdrawing_zero_liq() public {
-        helper_addLiquidity(3); //Starting with a bit of liquidity
-        u3.doWithdraw(0);
-    }
-
-    function testFail_calling_uni_callback() public {
-        manager.uniswapV3MintCallback(0, 0, "");
-    }
-
-    function test_single_collecting_fees() public {
-        (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
-        emit log_named_uint("price0", price0);
-        helper_logTick(tick0);
-
-        uint256 wethAmount = 1 ether;
-        uint256 raiAmount = 10 ether;
-
-        u2.doApprove(address(testRai), address(manager), raiAmount);
-        u2.doApprove(address(testWeth), address(manager), wethAmount);
-
-        (,,,,uint256 __threshold) = manager.position();
-        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
-
-        uint128 liq = helper_getLiquidityAmountsForTicks(price0, newLower, newUpper, 1 ether, 10 ether);
-
-        uint256 bal0w = testWeth.balanceOf(address(u2));
-        uint256 bal0r = testRai.balanceOf(address(u2));
-        u2.doDeposit(liq);
-
-        helper_do_swap();
-        
-        u2.doWithdraw(liq);
-
-        uint256 bal1w = testWeth.balanceOf(address(u2));
-        uint256 bal1r = testRai.balanceOf(address(u2));
-        emit log_named_uint("bal0w", bal0w);
-        emit log_named_uint("bal0r", bal0r);
-        emit log_named_uint("bal1w", bal1w);
-        emit log_named_uint("bal1r", bal1r);
-
-        (uint160 price2,int24 tick2 , , , , , ) = pool.slot0();
-
-        emit log_named_uint("price2", price2);
-        helper_logTick(tick2);
-
-        assertTrue(bal1r > bal0r);
-    }
-
-    function test_multiple_users_depositing() public {
-        helper_addLiquidity(1); // Starting with a bit of liquidity
-        uint256 u1_balance = manager.balanceOf(address(u1));
-        assert(u1_balance == manager.totalSupply());
-
-        helper_addLiquidity(2); // Starting with a bit of liquidity
-        uint256 u2_balance = manager.balanceOf(address(u2));
-        assert(u1_balance + u2_balance == manager.totalSupply());
-
-        helper_addLiquidity(3); // Starting with a bit of liquidity
-        uint256 u3_balance = manager.balanceOf(address(u3));
-        assert(u1_balance + u2_balance + u3_balance == manager.totalSupply());
-    }
-
-    function test_mint_transfer_and_burn() public {
-        helper_addLiquidity(1); //Starting with a bit of liquidity
-        u1.doTransfer(address(manager), address(u3), manager.balanceOf(address(u1)));
-        u3.doWithdraw(uint128(manager.balanceOf(address(u3))));
-    }
-
-    function test_liquidty_proportional_to_balance() public {
-        testRai.approve(address(manager), 10);
-        testWeth.approve(address(manager), 10);
-        helper_addLiquidity(1);
-
-        // Make RAI twice more expensive
-        helper_changeRedemptionPrice(6000000000 ether);
-
-        // Add some liquidity
-        helper_addLiquidity(1);
-
-        // Return to the original price
-        helper_changeRedemptionPrice(3000000000 ether);
-        hevm.warp(2 days);
-
-        manager.rebalance();
-
-        (bytes32 id, , , uint128 uniLiquidity1,) = manager.position();
-        (uint128 _liquidity, , , , ) = pool.positions(id);
-        emit log_named_uint("_liquidity", _liquidity);
-        emit log_named_uint("liq", uniLiquidity1);
-        emit log_named_uint("bal", manager.balanceOf(address(u1)));
-
-        // user should be able to withdraw their whole balance. Balance != Liquidity
-        u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
-    }
-
-    function test_multiple_users_adding_liquidity() public {
-        uint256 u1_raiAmount = 5 ether;
-        uint256 u1_wethAmount = 2 ether;
-
-        u1.doApprove(address(testRai), address(manager), u1_raiAmount);
-        u1.doApprove(address(testWeth), address(manager), u1_wethAmount);
-
-        (bytes32 id, int24 init_lowerTick, int24 init_upperTick, uint128 uniLiquidity1,) = manager.position();
-        (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, init_lowerTick, init_upperTick, u1_wethAmount, u1_raiAmount);
-
-        u1.doDeposit(u1_liquidity);
-
-        // totalSupply should equal the sum of both liquidity amounts
-        assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
-
-        // Getting new pool information
-        (, int24 mid_lowerTick, int24 mid_upperTick, uint128 mid_uniLiquidity,) = manager.position();
-        assertTrue(mid_uniLiquidity == uniLiquidity1 + u1_liquidity);
-
-        // Pool position shouldn't have changed
-        assertTrue(init_lowerTick == mid_lowerTick);
-        assertTrue(init_upperTick == mid_upperTick);
-
-        // Make the redemption price higher
-        helper_changeRedemptionPrice(3500000000 ether);
-
-        uint256 u2_raiAmount = 5 ether;
-        uint256 u2_wethAmount = 2 ether;
-
-        u2.doApprove(address(testRai), address(manager), u2_raiAmount);
-        u2.doApprove(address(testWeth), address(manager), u2_wethAmount);
-
-        (,,,,uint256 __threshold) = manager.position();
-        (int24 end_lowerTick, int24 end_upperTick, ) = manager.getNextTicks(__threshold);
-        (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, end_lowerTick, end_upperTick, u2_wethAmount, u2_raiAmount);
-
-        u2.doDeposit(u2_liquidity);
-
-        helper_logTick(mid_upperTick);
-        helper_logTick(end_upperTick);
-        // totalSupply should be equal to the sum of the liquidity amounts
-        assertTrue(manager.totalSupply() == u1_liquidity + u2_liquidity);
-        assertTrue(mid_lowerTick < end_lowerTick);
-        assertTrue(mid_upperTick < end_upperTick);
-
-        // assertTrue(false);
-    }
-
-    function test_getNextTicks_return_correctly() public {
+        function test_getNextTicks_return_correctly() public {
         helper_addLiquidity(1); // Starting with a bit of liquidity
         helper_addLiquidity(2); // Starting with a bit of liquidity
         helper_addLiquidity(3); // Starting with a bit of liquidity
@@ -716,6 +212,271 @@ contract GebUniswapV3LiquidityManagerTest is DSTest {
 
         assertTrue(amount0 == ac_amount0);
         assertTrue(amount1 == ac_amount1);
+    }
+
+
+    // --- Test Basic Functions ---
+    function test_adding_liquidity() public {
+        uint256 token0Amt = 10 ether;
+        uint256 token1Amt = 10 ether;
+
+        u1.doApprove(address(testRai), address(manager), token0Amt);
+        u1.doApprove(address(testWeth), address(manager), token1Amt);
+
+        (uint160 price1,int24 poolTick , , , , , ) = pool.slot0();
+        helper_logTick(poolTick);
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
+
+        uint128 liq = helper_getLiquidityAmountsForTicks(price1, newLower, newUpper, token0Amt, token1Amt);
+
+        uint256 bal0Before = token0.balanceOf(address(u1));
+        uint256 bal1Before = token1.balanceOf(address(u1));
+
+        u1.doDeposit(liq);
+
+        uint256 bal0After = token0.balanceOf(address(u1));
+        uint256 bal1After = token1.balanceOf(address(u1));
+        
+
+        assertTrue(bal0Before > bal0After);
+        assertTrue(bal1Before > bal1After);
+
+
+        (bytes32 id, , , uint128 uniLiquidity,) = manager.position();
+        (uint128 _liquidity, , , , ) = pool.positions(id);
+        assertTrue(uniLiquidity == _liquidity);
+
+        uint256 liquidityReceived = manager.totalSupply();
+        assertTrue(liquidityReceived == liq);
+
+        uint256 liqReceived = manager.balanceOf(address(u1));
+        assertTrue(liqReceived == liq);
+    }
+
+    function testFail_adding_zero_liquidity() public {
+        u2.doDeposit(0);
+    }
+
+    function test_rebalancing_pool() public {
+        // Start with little liquidity
+        helper_addLiquidity(1);
+        helper_addLiquidity(2);
+        helper_addLiquidity(3);
+
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+
+        (bytes32 init_id, int24 init_lowerTick, int24 init_upperTick, uint128 init_uniLiquidity,) = manager.position();
+        hevm.warp(2 days); // Advance to the future
+
+        helper_changeRedemptionPrice(2500000000 ether); // Making RAI cheaper
+
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
+
+        // The lower bound might still be the same, since it's currently the MIN_TICK
+        assertTrue(init_lowerTick != newLower);
+        assertTrue(init_upperTick != newUpper);
+
+        manager.rebalance();
+
+        (uint128 _liquidity, , , , ) = pool.positions(init_id);
+        assertTrue(_liquidity == 0); //We should have burned the whole old position
+
+        (, int24 end_lowerTick, int24 end_upperTick, uint128 end_uniLiquidity,) = manager.position();
+
+        assertTrue(end_lowerTick == newLower);
+        assertTrue(end_upperTick == newUpper);
+
+        // emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
+        // emit log_named_uint("init_uniLiquidity", init_uniLiquidity);
+        assertTrue(end_uniLiquidity <= init_uniLiquidity);
+    }
+
+    function testFail_early_rebalancing() public {
+        hevm.warp(2 days);    // Advance to the future
+        manager.rebalance();  // Should pass
+        hevm.warp(2 minutes); // Advance to the future
+        manager.rebalance();  // Should fail
+    }
+
+    function test_withdrawing_liquidity() public {
+        helper_addLiquidity(1); // Starting with a bit of liquidity
+
+        uint256 liq = manager.balanceOf(address(u1));
+        (bytes32 inti_id, , , uint128 inti_uniLiquidity,) = manager.position();
+        (uint128 _li, , , , ) = pool.positions(inti_id);
+
+        assertTrue(liq == _li);
+        // emit log_named_uint("liq", liq);
+        // emit log_named_uint("liq", inti_uniLiquidity);
+        // emit log_named_uint("_li", _li);
+
+        // Withdraw half of the liquidity
+        (uint256 bal0, uint256 bal1) = u1.doWithdraw(uint128(liq / 2));
+        
+        helper_assert_is_close(manager.balanceOf(address(u1)), liq / 2);
+
+        (uint128 _li2, , , , ) = pool.positions(inti_id);
+        emit log_named_uint("_li2", _li2);
+        emit log_named_uint("_li / 2", _li / 2);
+        helper_assert_is_close(_li2, _li / 2);
+
+        (bytes32 end_id, , , uint128 end_uniLiquidity,) = manager.position();
+        emit log_named_uint("inti_uniLiquidity", inti_uniLiquidity / 2);
+        emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
+        helper_assert_is_close(end_uniLiquidity, inti_uniLiquidity / 2);
+    }
+
+    function testFail_withdrawing_zero_liq() public {
+        helper_addLiquidity(3); //Starting with a bit of liquidity
+        u3.doWithdraw(0);
+    }
+
+    function testFail_calling_uni_callback() public {
+        manager.uniswapV3MintCallback(0, 0, "");
+    }
+
+    // function test_single_collecting_fees() public {
+    //     (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
+    //     emit log_named_uint("price0", price0);
+    //     helper_logTick(tick0);
+
+    //     uint256 wethAmount = 1 ether;
+    //     uint256 raiAmount = 10 ether;
+
+    //     u2.doApprove(address(testRai), address(manager), raiAmount);
+    //     u2.doApprove(address(testWeth), address(manager), wethAmount);
+
+    //     (,,,,uint256 __threshold) = manager.position();
+    //     (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
+
+    //     uint128 liq = helper_getLiquidityAmountsForTicks(price0, newLower, newUpper, 1 ether, 10 ether);
+
+    //     uint256 bal0w = testWeth.balanceOf(address(u2));
+    //     uint256 bal0r = testRai.balanceOf(address(u2));
+    //     u2.doDeposit(liq);
+
+    //     helper_do_swap();
+        
+    //     u2.doWithdraw(liq);
+
+    //     uint256 bal1w = testWeth.balanceOf(address(u2));
+    //     uint256 bal1r = testRai.balanceOf(address(u2));
+    //     emit log_named_uint("bal0w", bal0w);
+    //     emit log_named_uint("bal0r", bal0r);
+    //     emit log_named_uint("bal1w", bal1w);
+    //     emit log_named_uint("bal1r", bal1r);
+
+    //     (uint160 price2,int24 tick2 , , , , , ) = pool.slot0();
+
+    //     emit log_named_uint("price2", price2);
+    //     helper_logTick(tick2);
+
+    //     assertTrue(bal1r > bal0r);
+    // }
+
+    function test_multiple_users_depositing() public {
+        helper_addLiquidity(1); // Starting with a bit of liquidity
+        uint256 u1_balance = manager.balanceOf(address(u1));
+        assert(u1_balance == manager.totalSupply());
+
+        helper_addLiquidity(2); // Starting with a bit of liquidity
+        uint256 u2_balance = manager.balanceOf(address(u2));
+        assert(u1_balance + u2_balance == manager.totalSupply());
+
+        helper_addLiquidity(3); // Starting with a bit of liquidity
+        uint256 u3_balance = manager.balanceOf(address(u3));
+        assert(u1_balance + u2_balance + u3_balance == manager.totalSupply());
+    }
+
+    function test_mint_transfer_and_burn() public {
+        helper_addLiquidity(1); //Starting with a bit of liquidity
+        u1.doTransfer(address(manager), address(u3), manager.balanceOf(address(u1)));
+        u3.doWithdraw(uint128(manager.balanceOf(address(u3))));
+    }
+
+    function test_liquidty_proportional_to_balance() public {
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+        helper_addLiquidity(1);
+
+        // Make RAI twice more expensive
+        helper_changeRedemptionPrice(6000000000 ether);
+
+        // Another user adding liquidity
+        helper_addLiquidity(2);
+
+        // Return to the original price
+        helper_changeRedemptionPrice(3000000000 ether);
+        hevm.warp(2 days);
+
+        manager.rebalance();
+
+        uint256 bal1 = manager.balanceOf(address(u1));
+        uint256 bal2 = manager.balanceOf(address(u2));
+
+        assertTrue(bal1 != bal2);
+        // (bytes32 id, , , uint128 uniLiquidity1,) = manager.position();
+        // (uint128 _liquidity, , , , ) = pool.positions(id);
+        emit log_named_uint("bal1", bal1);
+        emit log_named_uint("bal2", bal2);
+
+        // user should be able to withdraw their whole balance. Balance != Liquidity
+        u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
+        u2.doWithdraw(uint128(manager.balanceOf(address(u2))));
+
+        assertTrue(manager.totalSupply() == 0);
+    }
+
+    function test_multiple_users_adding_liquidity() public {
+        uint256 u1_tkn0Amount = 5 ether;
+        uint256 u1_tkn1Amount = 5 ether;
+
+        u1.doApprove(address(testRai), address(manager), u1_tkn0Amount);
+        u1.doApprove(address(testWeth), address(manager), u1_tkn1Amount);
+
+        (bytes32 id, int24 init_lowerTick, int24 init_upperTick, uint128 uniLiquidity1,) = manager.position();
+        (uint160 u1_sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint128 u1_liquidity = helper_getLiquidityAmountsForTicks(u1_sqrtRatioX96, init_lowerTick, init_upperTick, u1_tkn0Amount, u1_tkn1Amount);
+
+        u1.doDeposit(u1_liquidity);
+
+        // totalSupply should equal the sum of both liquidity amounts
+        assertTrue(manager.totalSupply() == uniLiquidity1 + u1_liquidity);
+
+        // Getting new pool information
+        (, int24 mid_lowerTick, int24 mid_upperTick, uint128 mid_uniLiquidity,) = manager.position();
+        assertTrue(mid_uniLiquidity == uniLiquidity1 + u1_liquidity);
+
+        // Pool position shouldn't have changed
+        assertTrue(init_lowerTick == mid_lowerTick);
+        assertTrue(init_upperTick == mid_upperTick);
+
+        // Make the redemption price higher
+        helper_changeRedemptionPrice(3500000000 ether);
+
+        uint256 u2_tkn0Amount = 5 ether;
+        uint256 u2_tkn1Amount = 5 ether;
+
+        u2.doApprove(address(testRai), address(manager), u2_tkn0Amount);
+        u2.doApprove(address(testWeth), address(manager), u2_tkn1Amount);
+
+        (,,,,uint256 __threshold) = manager.position();
+        (int24 end_lowerTick, int24 end_upperTick, ) = manager.getNextTicks(__threshold);
+        (uint160 u2_sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint128 u2_liquidity = helper_getLiquidityAmountsForTicks(u2_sqrtRatioX96, end_lowerTick, end_upperTick, u2_tkn0Amount, u2_tkn1Amount);
+
+        u2.doDeposit(u2_liquidity);
+
+        helper_logTick(mid_upperTick);
+        helper_logTick(end_upperTick);
+        // totalSupply should be equal to the sum of the liquidity amounts
+        assertTrue(manager.totalSupply() == u1_liquidity + u2_liquidity);
+        assertTrue(mid_lowerTick < end_lowerTick);
+        assertTrue(mid_upperTick < end_upperTick);
+
     }
 
     function test_sqrt_conversion() public {
