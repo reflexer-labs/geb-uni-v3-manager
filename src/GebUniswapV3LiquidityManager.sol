@@ -30,9 +30,9 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         OracleForUniswapLike oracle_,
         PoolViewer poolViewer_
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_) {
-        require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-threshold");
-        require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tick-spacing");
-        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
+        require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapV3LiquidityManager/invalid-threshold");
+        require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapV3LiquidityManager/threshold-incompatible-w/-tick-spacing");
+        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapV3LiquidityManager/invalid-delay");
 
         int24 target = getTargetTick();
         (int24 lower, int24 upper) = getTicksWithThreshold(target, threshold_);
@@ -80,8 +80,8 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      *      A round robin could be done where, in each deposit, only one of the pool's positions is rebalanced
      */
     function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
-        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
+        require(recipient != address(0), "GebUniswapV3LiquidityManager/invalid-recipient");
+        require(newLiquidity < MAX_UINT128, "GebUniswapV3LiquidityManager/too-much-to-mint-at-once");
 
         uint128 totalLiquidity = position.uniLiquidity;
         int24 target= getTargetTick();
@@ -109,15 +109,15 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @return amount1 The amount of token1 requested from the pool
      */
     function withdraw(uint256 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
-        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
+        require(recipient != address(0), "GebUniswapV3LiquidityManager/invalid-recipient");
+        require(liquidityAmount != 0, "GebUniswapV3LiquidityManager/burning-zero-amount");
 
         uint256 __supply = _totalSupply;
         // Burn sender tokens
         _burn(msg.sender, uint256(liquidityAmount));
 
         uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
-        require(_liquidityBurned < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
+        require(_liquidityBurned < MAX_UINT128, "GebUniswapV3LiquidityManager/too-much-to-burn-at-once");
 
         (amount0, amount1) = _withdraw(position, uint128(_liquidityBurned), recipient);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
@@ -127,7 +127,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
     function rebalance() external override {
-       require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
+       require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapV3LiquidityManager/too-soon");
 
         int24 target= getTargetTick();
 
