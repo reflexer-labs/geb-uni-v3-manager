@@ -27,7 +27,6 @@ contract TestWETH is TestToken {
 
 abstract contract Hevm {
     function warp(uint256) public virtual;
-
     function roll(uint256) public virtual;
 }
 

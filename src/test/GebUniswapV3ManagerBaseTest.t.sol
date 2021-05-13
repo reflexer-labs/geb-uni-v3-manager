@@ -8,7 +8,6 @@ import "./TestHelpers.sol";
 import "./OracleLikeMock.sol";
 
 contract GebUniswapV3ManagerBaseTest is DSTest {
-
     using SafeMath for uint256;
 
     Hevm hevm;
@@ -30,7 +29,6 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
     PoolUser u4;
 
     PoolUser[4] public users;
-
 
     function setUp() virtual public {
         // Deploy GEB
@@ -61,7 +59,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
             z = 1;
         }
     }
-    
+
     // --- Helpers ---
     function helper_deployV3Pool(
         address _token0,
@@ -132,7 +130,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
     function helper_do_swap() public {
         (uint160 currentPrice, , , , , , ) = pool.slot0();
-       
+
         uint160 sqrtLimitPrice = currentPrice + 1 ether ;
         pool.swap(address(this), false, 1 ether, sqrtLimitPrice, bytes(""));
     }
@@ -144,9 +142,8 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
         emit log_named_uint("eq", eq ? 1 :0);
         emit log_named_uint("bg", bg ? 1 :0);
         emit log_named_uint("sm", sm ? 1 :0);
-        assertTrue(eq || bg || sm); 
+        assertTrue(eq || bg || sm);
     }
-
 
     function helper_addWhaleLiquidity() public {
         uint256 token0Am = 1000 ether;
@@ -157,6 +154,4 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
         pool.mint(address(this), low, upp, 1000000000, bytes(""));
     }
-
-
 }
