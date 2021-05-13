@@ -133,7 +133,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         // Getting pool information
         pool = IUniswapV3Pool(pool_);
 
-        // We might want to save gas so this takes values straight from the pool, trusting that they are correct
         token0 = pool.token0();
         token1 = pool.token1();
         fee = pool.fee();
@@ -191,7 +190,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
         if (parameter == "oracle") {
           // If it's an invalid address, this tx will revert
-          (uint256 redemptionPrice, uint256 tokenPrice, bool valid) = OracleForUniswapLike(data).getResultsWithValidity();
+          OracleForUniswapLike(data).getResultsWithValidity();
           oracle = OracleForUniswapLike(data);
         }
 
@@ -246,7 +245,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         targetTick = approximatedTick - (approximatedTick % tickSpacing);
     }
 
-    function getTicksWithThreshold(int24 targetTick, uint256 _threshold) public view returns(int24 lowerTick, int24 upperTick){
+    function getTicksWithThreshold(int24 targetTick, uint256 _threshold) public pure returns(int24 lowerTick, int24 upperTick){
         // 5. Find lower and upper bounds for the next position
         lowerTick = targetTick - int24(_threshold) < MIN_TICK ? MIN_TICK : targetTick - int24(_threshold);
         upperTick = targetTick + int24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + int24(_threshold);
@@ -264,18 +263,16 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         (amount0, amount1) = abi.decode(ret, (uint256, uint256));
     }
 
-        /**
+    /**
      * @notice Remove liquidity and withdraw the underlying assets
      * @param _position The position to perform the operation
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
-     * @return mintAmount The amount of liquidity minted
      */
-    function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal returns (uint256 mintAmount) {
+    function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal{
         (int24 _currentLowerTick, int24 _currentUpperTick) = (_position.lowerTick, _position.upperTick);
         uint128 previousLiquidity = _position.uniLiquidity;
 
-        // Ugly, but avoids stack too deep error
         (int24 _nextLowerTick, int24 _nextUpperTick) = (0, 0);
         (_nextLowerTick, _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
 
@@ -296,8 +293,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
             sqrtRatioX96,
             TickMath.getSqrtRatioAtTick(_nextLowerTick),
             TickMath.getSqrtRatioAtTick(_nextUpperTick),
-            collected0 + 1,
-            collected1 + 1
+            collected0.add(1),
+            collected1.add(1)
           );
 
           emit Rebalance(msg.sender, block.timestamp);
@@ -305,7 +302,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
 
         // 3. Mint our new position on Uniswap
         require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
-        _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity + compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+        _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity+compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
         lastRebalance = block.timestamp;
     }
 
@@ -349,8 +346,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
               sqrtRatioX96,
               TickMath.getSqrtRatioAtTick(_nextLowerTick),
               TickMath.getSqrtRatioAtTick(_nextUpperTick),
-              collected0 + 1,
-              collected1 + 1
+              collected0.add(1),
+              collected1.add(1)
             );
 
           _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
@@ -398,12 +395,18 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         uint128 _burnedLiquidity,
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
-        // Amount owed might be more than requested. What do we do?
+        (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(_position.id);
+
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
+
+        ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
+
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
+         ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
+        
         // Update position. All other factors are still the same
-        (uint128 _liquidity, , , , ) = pool.positions(_position.id);
+        ( _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
 
@@ -439,5 +442,3 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         }
     }
 }
-
-// "GebUniswapManager","GUM","0x76b06a2f6dF6f0514e7BEC52a9AfB3f603b477CD","200040","240","0xe25df12aa3d86118e5fcfd6cf573fba7648a2f2d ","0x652a70e9f744b46d916afa46abdd42bcb1b6ebe9","0xb9516057dc40c92f91b6ebb2e3d04288cd0446f1 "
