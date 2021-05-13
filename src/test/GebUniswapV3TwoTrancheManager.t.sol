@@ -5,7 +5,6 @@ import "./GebUniswapV3ManagerBaseTest.t.sol";
 
 
 contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
- 
     GebUniswapV3TwoTrancheManager manager;
 
     uint256 threshold1 = 200040; //20%
@@ -14,10 +13,9 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     uint128 ratio2 = 50; //36%
     uint256 delay = 120 minutes; //10 minutes
 
-
     function setUp()  override public {
         super.setUp();
-        
+
         manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv);
         manager_base = GebUniswapV3ManagerBase(manager);
 
@@ -41,8 +39,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         helper_addWhaleLiquidity();
     }
 
-    
-
     function helper_addLiquidity(uint8 user) public {
         // (bytes32 i_id, , , uint128 i_uniLiquidity,) = manager.position();
         // (uint128 i_liquidity, , , , ) = pool.positions(i_id);
@@ -59,7 +55,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         // uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, wethAmount, raiAmount);
         u.doDeposit(100000000000000);
     }
-
 
     function uniswapV3MintCallback(
         uint256 amount0Owed,
@@ -201,7 +196,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         assertTrue(tkn1Amt == amount1);
     }
 
-
     function testFail_adding_zero_liquidity() public {
         u2.doDeposit(0);
     }
@@ -213,7 +207,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         manager.rebalance(); // should fail
     }
 
-
     function testFail_withdrawing_zero_liq() public {
         helper_addLiquidity(3); //Starting with a bit of liquidity
         u3.doWithdraw(0);
@@ -222,7 +215,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     function testFail_calling_uni_callback() public {
         manager.uniswapV3MintCallback(0, 0, "");
     }
-
 
     // Test not passing because swap is not accruing fees
     // function test_collecting_fees() public {
@@ -300,6 +292,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         // (uint128 _liquidity, , , , ) = pool.positions(id);
         // emit log_named_uint("_liquidity", _liquidity);
         // emit log_named_uint("liq", uniLiquidity1);
+        
         // user should be able to withdraw it's whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
 
@@ -319,10 +312,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
 
         // assertTrue(false);
     }
-
-    
-
-   
 
     function test_getter_return_correct_amount() public {
         helper_addLiquidity(1); //Starting with a bit of liquidity
