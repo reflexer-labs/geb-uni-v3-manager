@@ -50,7 +50,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         ratio1 = ratio_1;
         ratio2 = ratio_2;
 
-        // Initializing Starting positions
+        // Initialize starting positions
         int24 target = getTargetTick();
         (int24 lower_1, int24 upper_1) = getTicksWithThreshold(target, threshold_1);
         positions[0] = Position({
