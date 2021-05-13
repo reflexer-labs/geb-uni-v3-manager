@@ -29,7 +29,7 @@ These numbers can be optimized for each pool, according to volatility or other f
 
 A shortcoming of this design is that both `rebalance()` and `deposit()` gas costs increase linearly with the second tranche.
 
-#### Future Improvements
+## Future Improvements
 
 Unlike Uniswap V2, Uniswap V3 can have multiple pools for the same pair, each one with a different fee structure. Currently, the liquidity manager can only operate in a single pool, meaning it'll have to choose a single fee tier. A future implementation might allow for multiple positions in multiple pools for the same pair.
 
