@@ -118,7 +118,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @notice Add liquidity to this Uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
-     * @dev In case of a multi-tranche scenario, rebalancing all three might be too expensive for the ende user.
+     * @dev In case of a multi-tranche scenario, rebalancing all tranches might be too expensive for the ende user.
      *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
     function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
