@@ -79,7 +79,7 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         assertTrue(_threshold == threshold);
     }
 
-    /* function test_sanity_variables_address() public {
+    function test_sanity_variables_address() public {
         address token0_ = manager.token0();
         assertTrue(token0_ == address(testRai) || token0_ == address(testWeth));
 
@@ -519,5 +519,5 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         helper_addLiquidity(3);
 
         u3.doWithdraw(uint128(0 - 1));
-    } */
+    }
 }
