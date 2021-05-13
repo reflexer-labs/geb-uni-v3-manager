@@ -83,10 +83,8 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
 
-
         uint128 totalLiquidity = position.uniLiquidity;
         int24 target= getTargetTick();
-
 
         _deposit(position, uint128(newLiquidity), target);
 
