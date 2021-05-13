@@ -6,15 +6,12 @@ import "./GebUniswapV3ManagerBase.sol";
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
 contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
-
-
     // --- Variables ---
-
     // Manager positions on uniswap pool
     Position[2] public positions;
-    // Ratio for each pool in relation to the total capital, in percents. 1 == 1%
-    uint128 public ratio1;
-    uint128 public ratio2;
+    // Ratio for each tranche allocation in relation to the total capital allocated, in percentages (1 == 1%)
+    uint128     public ratio1;
+    uint128     public ratio2;
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -42,17 +39,17 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       OracleForUniswapLike oracle_,
       PoolViewer poolViewer_
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_) {
-        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold");
-        require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
+        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold");
+        require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
-        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapv3LiquidityManager/invalid-thresold2");
-        require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapv3LiquidityManager/threshold-incompatible-w/-tickSpacing");
+        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold2");
+        require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
-        require(ratio_1.add(ratio_2) == 100,"GebUniswapv3LiquidityManager/invalid-ratios");
+        require(ratio_1.add(ratio_2) == 100,"GebUniswapV3TwoTrancheManager/invalid-ratios");
 
         ratio1 = ratio_1;
         ratio2 = ratio_2;
-        
+
         // Initializing Starting positions
         int24 target = getTargetTick();
         (int24 lower_1, int24 upper_1) = getTicksWithThreshold(target, threshold_1);
@@ -80,7 +77,6 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
     }
 
     // --- Getters ---
-
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
      * @param _liquidity The amount of liquidity to withdraw
@@ -126,8 +122,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
      */
     function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
-        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        require(newLiquidity < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-mint-at-once");
+        require(recipient != address(0), "GebUniswapV3TwoTrancheManager/invalid-recipient");
+        require(newLiquidity < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-mint-at-once");
 
         uint128 totalLiquidity = positions[0].uniLiquidity.add(positions[1].uniLiquidity);
         int24 target= getTargetTick();
@@ -142,11 +138,10 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
           mintAmount = newLiquidity.mul(_totalSupply).div(totalLiquidity);
         }
 
-          _mint(recipient, mintAmount);
+        _mint(recipient, mintAmount);
 
         emit Deposit(msg.sender, recipient, newLiquidity);
     }
-
 
     /**
      * @notice Remove liquidity and withdraw the underlying assets
@@ -156,17 +151,17 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @return amount1 The amount of token1 requested from the pool
      */
     function withdraw(uint256 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
-        require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
-        require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
+        require(recipient != address(0), "GebUniswapV3TwoTrancheManager/invalid-recipient");
+        require(liquidityAmount != 0, "GebUniswapV3TwoTrancheManager/burning-zero-amount");
 
         uint256 __supply = _totalSupply;
         _burn(msg.sender, liquidityAmount);
 
         uint256 _liquidityBurned0 = liquidityAmount.mul(positions[0].uniLiquidity).div(__supply);
-        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
+        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-burn-at-once");
 
         uint256 _liquidityBurned1 = liquidityAmount.mul(positions[1].uniLiquidity).div(__supply);
-        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapv3LiquidityManager/too-much-to-burn-at-once");
+        require(_liquidityBurned0 < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-burn-at-once");
 
         (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], uint128(_liquidityBurned0), recipient);
         (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], uint128(_liquidityBurned1), recipient);
@@ -175,12 +170,11 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 
-
     /**
      * @notice Public function to move liquidity to the correct threshold from the redemption price
      */
     function rebalance() external override {
-        require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapv3LiquidityManager/too-soon");
+        require(block.timestamp.sub(lastRebalance) >= delay, "GebUniswapV3TwoTrancheManager/too-soon");
 
         int24 target= getTargetTick();
 

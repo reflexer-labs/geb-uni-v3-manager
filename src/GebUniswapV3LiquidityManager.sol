@@ -6,7 +6,7 @@ import "./GebUniswapV3ManagerBase.sol";
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
 contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
-
+    // --- Variables ---
     // This contracts' position in the Uniswap V3 pool
     Position public position;
 
@@ -40,9 +40,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         position = Position({ id: keccak256(abi.encodePacked(address(this), lower, upper)), lowerTick: lower, upperTick: upper, uniLiquidity: 0, threshold: threshold_ });
     }
 
-
     // --- Getters ---
-
     /**
      * @notice Returns the current amount of token0 for a given liquidity amount
      * @param _liquidity The amount of liquidity to withdraw
@@ -73,6 +71,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         (, amount1) = _getTokenAmountsFromLiquidity(position, _liquidity);
     }
 
+    // --- Core Logic ---
     /**
      * @notice Add liquidity to this pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
@@ -114,8 +113,8 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     function withdraw(uint256 liquidityAmount, address recipient) external override returns (uint256 amount0, uint256 amount1) {
         require(recipient != address(0), "GebUniswapv3LiquidityManager/invalid-recipient");
         require(liquidityAmount != 0, "GebUniswapv3LiquidityManager/burning-zero-amount");
-       
-        uint256 __supply = _totalSupply;        
+
+        uint256 __supply = _totalSupply;
         // Burn sender tokens
         _burn(msg.sender, uint256(liquidityAmount));
 
@@ -137,4 +136,3 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         _rebalance(position , target);
     }
 }
-

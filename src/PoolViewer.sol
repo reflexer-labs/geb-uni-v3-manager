@@ -66,10 +66,10 @@ contract PoolViewer {
 
     // --- Burn ---
     /**
-     * @notice Helper function to simulate(non state-mutating) an action on a Uniswap v3 pool
+     * @notice Helper function to simulate (non state-mutating) an action on a Uniswap v3 pool
      * @param pool The address of the target pool
-     * @param tickLower The lower bound of the uni v3 position
-     * @param tickUpper The lower bound of the uni v3 position
+     * @param tickLower The lower bound of the Uni v3 position
+     * @param tickUpper The lower bound of the Uni v3 position
      * @param amount The amount of liquidity to burn
      */
     function burnViewer(

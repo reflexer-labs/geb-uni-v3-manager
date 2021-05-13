@@ -20,7 +20,6 @@ import "./uniswap/E2E_swap.sol";
 contract Fuzzer is E2E_swap {
     using SafeMath for uint256;
 
-
     int24 lastRebalancePrice;
     constructor() public {}
 
@@ -225,8 +224,7 @@ contract Fuzzer is E2E_swap {
         }
     }
 
-    // --- Copied from test file ---
-
+    // --- Copied from a test file ---
     GebUniswapV3LiquidityManager public manager;
     OracleLikeMock oracle;
 
