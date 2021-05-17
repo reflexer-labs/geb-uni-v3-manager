@@ -3,7 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "../../TestHelpers.sol";
 import "../../../uni/UniswapV3Pool.sol";
-import "../../../GebUniswapV3LiquidityManager.sol";
+import "../../../GebUniswapV3ManagerBase.sol";
 import "../../../uni/UniswapV3Factory.sol";
 
 contract SetupTokens {
@@ -173,7 +173,7 @@ contract UniswapSwapper {
 }
 
 contract FuzzUser {
-    GebUniswapV3LiquidityManager manager;
+    GebUniswapV3ManagerBase manager;
     UniswapV3Pool pool;
     TestToken token0;
     TestToken token1;
@@ -187,7 +187,7 @@ contract FuzzUser {
     }
 
     constructor(
-        GebUniswapV3LiquidityManager man,
+        GebUniswapV3ManagerBase man,
         TestToken _token0,
         TestToken _token1
     ) public {
@@ -210,8 +210,8 @@ contract FuzzUser {
         int256 amount1Delta,
         bytes calldata data
     ) external {
-        if (amount0Delta > 0) token0.transfer(address(pool), uint256(amount0Delta));
-        if (amount1Delta > 0) token1.transfer(address(pool), uint256(amount1Delta));
+        if (amount0Delta > 0) token0.mintTo(address(pool), uint256(amount0Delta));
+        if (amount1Delta > 0) token1.mintTo(address(pool), uint256(amount1Delta));
     }
 
     function doSwap(
@@ -231,8 +231,8 @@ contract FuzzUser {
         uint256 amount1Owed,
         bytes calldata data
     ) external {
-        if (amount0Owed > 0) token0.transfer(address(pool), amount0Owed);
-        if (amount1Owed > 0) token1.transfer(address(pool), amount1Owed);
+        if (amount0Owed > 0) token0.mintTo(address(pool), amount0Owed);
+        if (amount1Owed > 0) token1.mintTo(address(pool), amount1Owed);
     }
 
     function getTickLiquidityVars(int24 _tickLower, int24 _tickUpper)

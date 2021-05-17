@@ -8,7 +8,7 @@ import { LiquidityAmounts } from "../.././uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "../.././uni/libraries/TickMath.sol";
 import "../../uni/UniswapV3Factory.sol";
 import ".././TestHelpers.sol";
-import ".././GebUniswapV3LiquidityManager.t.sol";
+import ".././GebUniswapV3TwoTrancheManager.t.sol";
 
 import "./uniswap/Setup.sol";
 import "./uniswap/E2E_swap.sol";
@@ -57,23 +57,23 @@ contract Fuzzer is E2E_swap {
         oracle.setCollateralPrice(newPrice);
     }
 
-    //Not using recipient to test totalSupply integrity
-    function depositForRecipient(address recipient, uint128 liquidityAmount) public {
-        if (!inited) {
-            _init(liquidityAmount);
-            setUp();
-        }
-        if (!inited) _init(liquidityAmount);
-        manager.deposit(liquidityAmount, address(this));
-    }
+    // //Not using recipient to test totalSupply integrity
+    // function depositForRecipient(address recipient, uint128 liquidityAmount) public {
+    //     if (!inited) {
+    //         _init(liquidityAmount);
+    //         setUp();
+    //     }
+    //     if (!inited) _init(liquidityAmount);
+    //     manager.deposit(liquidityAmount, address(this));
+    // }
 
-    function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
-        if (!inited) {
-            _init(liquidityAmount);
-            setUp();
-        }
-        manager.withdraw(liquidityAmount, address(this));
-    }
+    // function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
+    //     if (!inited) {
+    //         _init(liquidityAmount);
+    //         setUp();
+    //     }
+    //     manager.withdraw(liquidityAmount, address(this));
+    // }
 
     function user_Deposit(uint8 user, uint128 liq) public {
         if (!inited) {
@@ -154,18 +154,24 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, , , uint128 liq,) = manager.position();
-        (uint128 _liquidity, , , , ) = pool.positions(posId);
-        return (liq == _liquidity);
+        (bytes32 pos0Id, , , uint128 liq0,) = manager.positions(0);
+        (uint128 _liquidity0, , , , ) = pool.positions(pos0Id);
+        return (liq0 == _liquidity0);
+        (bytes32 pos1Id, , , uint128 liq1,) = manager.positions(1);
+        (uint128 _liquidity1, , , , ) = pool.positions(pos1Id);
+        return (liq1 == _liquidity1);
     }
 
     function echidna_always_has_a_position() public returns (bool) {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, , , ,) = manager.position();
-        (uint128 _liquidity, , , , ) = pool.positions(posId);
-        if (manager.totalSupply() > 0) return (_liquidity > 0);
+        (bytes32 posId, , , ,) = manager.positions(0);
+        (uint128 _liquidity0, , , , ) = pool.positions(posId);
+
+        (bytes32 posId1, , , ,) = manager.positions(1);
+        (uint128 _liquidity1, , , , ) = pool.positions(posId1);
+        if (manager.totalSupply() > 0) return _liquidity0 > 0 || _liquidity1 > 0;
         return true; // If there's no supply it's fine
     }
 
@@ -173,19 +179,26 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, int24 low, int24 up, uint128 liq,) = manager.position();
+        (bytes32 posId0, int24 low, int24 up, uint128 liq0,) = manager.positions(0);
         bytes32 id = keccak256(abi.encodePacked(address(manager), low, up));
-        return (posId == id);
-    }
+        (uint128 _liquidity0, , , , ) = pool.positions(id);
 
-    event DC(int24 l);
+        (bytes32 posId1, int24 low1, int24 up1, uint128 liq1,) = manager.positions(1);
+        bytes32 id1 = keccak256(abi.encodePacked(address(manager), low1, up1));
+        (uint128 _liquidity1, , , , ) = pool.positions(id1);
+
+        return posId0 == id && _liquidity0 == liq0 && posId1 == id1 && _liquidity1 == liq1;
+    }
 
     function echidna_select_ticks_correctly() public returns (bool) {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, int24 lower, int24 upper, ,uint256 _threshold) = manager.position();
-        return (lower + int24(_threshold) >= lastRebalancePrice && upper - int24(_threshold) <= lastRebalancePrice);
+        (, int24 lower0, int24 upper0, ,uint256 _threshold0) = manager.positions(0);
+        return (lower0 + int24(_threshold0) >= lastRebalancePrice && upper0 - int24(_threshold0) <= lastRebalancePrice);
+
+        (, int24 lower1, int24 upper1, ,uint256 _threshold1) = manager.positions(1);
+        return (lower1 + int24(_threshold1) >= lastRebalancePrice && upper1 - int24(_threshold1) <= lastRebalancePrice);
     }
 
     function echidna_supply_integrity() public returns (bool) {
@@ -216,20 +229,43 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (, , , uint128 liq,) = manager.position();
-        if (liq > 0) {
+        (, , , uint128 liq0,) = manager.positions(0);
+        (, , , uint128 liq1,) = manager.positions(1);
+        if (liq0 > 0 || liq1 > 0) {
             return manager.totalSupply() > 0;
         } else {
             return true;
         }
     }
 
+    function test_pool_is_always_solvent() public returns (bool) {
+        if (!inited) {
+            return true;
+        }
+        uint256 u1_bal = manager.balanceOf(address(u1));
+        uint256 u2_bal = manager.balanceOf(address(u2));
+        uint256 u3_bal = manager.balanceOf(address(u3));
+        uint256 u4_bal = manager.balanceOf(address(u4));
+        
+        bool revertion = false;
+
+        if(u1_bal > 0) try  u1.doWithdraw(uint128(u1_bal)) {} catch {revertion = true;}
+        if(u1_bal > 0) try  u2.doWithdraw(uint128(u2_bal)) {} catch {revertion = true;}
+        if(u1_bal > 0) try  u3.doWithdraw(uint128(u3_bal)) {} catch {revertion = true;}
+        if(u1_bal > 0) try  u4.doWithdraw(uint128(u4_bal)) {} catch {revertion = true;}
+
+        assert(revertion == false);
+    }
+
     // --- Copied from a test file ---
-    GebUniswapV3LiquidityManager public manager;
+    GebUniswapV3TwoTrancheManager public manager;
     OracleLikeMock oracle;
 
-    uint256 threshold = 420000;  // 40%
-    uint256 delay = 120 minutes; // 10 minutes
+    uint256 threshold1 = 200040; //20%
+    uint256 threshold2 = 50040; //5%
+    uint128 ratio1 = 50; //36%
+    uint128 ratio2 = 50; //36%
+    uint256 delay = 120 minutes; //10 minutes
 
     uint160 initialPoolPrice;
 
@@ -245,7 +281,7 @@ contract Fuzzer is E2E_swap {
         oracle = new OracleLikeMock();
         pv = new PoolViewer();
 
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), oracle, pv);
+       manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(token0), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv);
 
         u1 = new FuzzUser(manager, token0, token1);
         u2 = new FuzzUser(manager, token0, token1);
