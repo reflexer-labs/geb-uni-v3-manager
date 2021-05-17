@@ -3,9 +3,8 @@ pragma solidity ^0.6.7;
 import "../GebUniswapV3TwoTrancheManager.sol";
 import "./GebUniswapV3ManagerBaseTest.t.sol";
 
-
 contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
-    GebUniswapV3TwoTrancheManager manager;
+    GebUniswapV3TwoTrancheManager public manager;
 
     uint256 threshold1 = 200040; // 20%
     uint256 threshold2 = 50040;  // 5%
@@ -13,7 +12,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     uint128 ratio2 = 50;         // 36%
     uint256 delay = 120 minutes; // 10 minutes
 
-    function setUp()  override public {
+    function setUp() override public {
         super.setUp();
 
         manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv);
