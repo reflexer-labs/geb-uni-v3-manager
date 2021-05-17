@@ -138,7 +138,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
         pool.swap(address(this), false, 1 ether, sqrtLimitPrice, bytes(""));
     }
 
-     function helper_assert_is_close(uint256 val1, uint256 val2) public {
+    function helper_assert_is_close(uint256 val1, uint256 val2) public {
         bool eq = val1 == val2;
         bool bg = val1 + 1 == val2;
         bool sm = val1 - 1 == val2;
@@ -154,7 +154,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
         int24 low = -887220;
         int24 upp = 887220;
-        
+
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
         pool.mint(address(this), low, upp, 1000000000, bytes(""));

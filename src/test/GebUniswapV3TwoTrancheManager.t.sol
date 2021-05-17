@@ -19,7 +19,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv);
         manager_base = GebUniswapV3ManagerBase(manager);
 
-        //Will initialize the pool with current price
+        // Will initialize the pool with current price
         initialPoolPrice = helper_getRebalancePrice();
         pool.initialize(initialPoolPrice);
 
@@ -83,7 +83,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         uint256 _delay = manager.delay();
         assertTrue(_delay == delay);
     }
-    
+
     function test_sanity_positions() public {
         (,,,,uint256 _threshold1) = manager.positions(0);
         assertTrue(_threshold1 == threshold1);
