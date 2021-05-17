@@ -7,7 +7,7 @@ import "./GebUniswapV3ManagerBase.sol";
  */
 contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
     // --- Variables ---
-    // Manager positions on uniswap pool
+    // Manager's positions in the Uniswap pool
     Position[2] public positions;
     // Ratio for each tranche allocation in relation to the total capital allocated, in percentages (1 == 1%)
     uint128     public ratio1;

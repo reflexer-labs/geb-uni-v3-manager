@@ -5,7 +5,7 @@ import "../GebUniswapV3LiquidityManager.sol";
 
 contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
     uint256 threshold = 200040; //~20%
-    uint256 delay = 120 minutes;
+    uint256 delay     = 120 minutes;
 
     GebUniswapV3LiquidityManager manager;
 
@@ -213,7 +213,6 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         assertTrue(amount0 == ac_amount0);
         assertTrue(amount1 == ac_amount1);
     }
-
 
     // --- Test Basic Functions ---
     function test_adding_liquidity() public {

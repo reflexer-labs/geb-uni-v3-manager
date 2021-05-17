@@ -11,10 +11,13 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
     using SafeMath for uint256;
 
     Hevm hevm;
+
     GebUniswapV3ManagerBase manager_base;
     UniswapV3Pool pool;
+
     TestRAI testRai;
     TestWETH testWeth;
+
     OracleLikeMock oracle;
     PoolViewer pv;
 
@@ -148,8 +151,10 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
     function helper_addWhaleLiquidity() public {
         uint256 token0Am = 1000 ether;
         uint256 token1Am = 1000 ether;
+
         int24 low = -887220;
         int24 upp = 887220;
+        
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
         pool.mint(address(this), low, upp, 1000000000, bytes(""));

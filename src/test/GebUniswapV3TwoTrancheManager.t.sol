@@ -7,11 +7,11 @@ import "./GebUniswapV3ManagerBaseTest.t.sol";
 contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     GebUniswapV3TwoTrancheManager manager;
 
-    uint256 threshold1 = 200040; //20%
-    uint256 threshold2 = 50040; //5%
-    uint128 ratio1 = 50; //36%
-    uint128 ratio2 = 50; //36%
-    uint256 delay = 120 minutes; //10 minutes
+    uint256 threshold1 = 200040; // 20%
+    uint256 threshold2 = 50040;  // 5%
+    uint128 ratio1 = 50;         // 36%
+    uint128 ratio2 = 50;         // 36%
+    uint256 delay = 120 minutes; // 10 minutes
 
     function setUp()  override public {
         super.setUp();
@@ -83,7 +83,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         uint256 _delay = manager.delay();
         assertTrue(_delay == delay);
     }
-
+    
     function test_sanity_positions() public {
         (,,,,uint256 _threshold1) = manager.positions(0);
         assertTrue(_threshold1 == threshold1);
@@ -95,6 +95,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         uint256 _ratio2 = manager.ratio2();
         assertTrue(_ratio2 == ratio2);
     }
+
     function test_sanity_variables_address() public {
         address token0_ = manager.token0();
         assertTrue(token0_ == address(testRai) || token0_ == address(testWeth));
@@ -292,7 +293,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         // (uint128 _liquidity, , , , ) = pool.positions(id);
         // emit log_named_uint("_liquidity", _liquidity);
         // emit log_named_uint("liq", uniLiquidity1);
-        
+
         // user should be able to withdraw it's whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
 

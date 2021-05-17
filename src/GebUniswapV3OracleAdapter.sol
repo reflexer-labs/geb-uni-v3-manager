@@ -43,7 +43,7 @@ contract GebUniswapV3OracleAdapter is OracleForUniswapLike {
         (OracleLike priceSource, , ) = oracleRelayer.collateralTypes(collateral);
 
         (uint256 collateralPrice, bool valid) = priceSource.getResultWithValidity();
-        require(valid, "GebUniswapv3LiquidityManager/invalid-col-price-feed");
+        require(valid, "GebUniswapV3LiquidityManager/invalid-col-price-feed");
 
         return (redemptionPrice / WAD_COMPLEMENT, collateralPrice, true);
     }
