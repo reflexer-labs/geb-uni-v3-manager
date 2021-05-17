@@ -56,30 +56,12 @@ contract Fuzzer is E2E_swap {
         }
         oracle.setCollateralPrice(newPrice);
     }
-
-    // //Not using recipient to test totalSupply integrity
-    // function depositForRecipient(address recipient, uint128 liquidityAmount) public {
-    //     if (!inited) {
-    //         _init(liquidityAmount);
-    //         setUp();
-    //     }
-    //     if (!inited) _init(liquidityAmount);
-    //     manager.deposit(liquidityAmount, address(this));
-    // }
-
-    // function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
-    //     if (!inited) {
-    //         _init(liquidityAmount);
-    //         setUp();
-    //     }
-    //     manager.withdraw(liquidityAmount, address(this));
-    // }
-
     function user_Deposit(uint8 user, uint128 liq) public {
         if (!inited) {
             _init(liq);
             setUp();
         }
+        lastRebalancePrice = manager.getTargetTick();
         users[user % 4].doDeposit(liq);
     }
 
@@ -146,9 +128,6 @@ contract Fuzzer is E2E_swap {
     }
 
     // --- Echidna Tests ---
-    // function echidna_sanity_check() public returns (bool) {
-    //     return address(manager) == address(0);
-    // }
 
     function echidna_position_integrity() public returns (bool) {
         if (!inited) {
@@ -238,7 +217,7 @@ contract Fuzzer is E2E_swap {
         }
     }
 
-    function test_pool_is_always_solvent() public returns (bool) {
+    function echidna_pool_is_always_solvent() public returns (bool) {
         if (!inited) {
             return true;
         }
@@ -254,7 +233,7 @@ contract Fuzzer is E2E_swap {
         if(u1_bal > 0) try  u3.doWithdraw(uint128(u3_bal)) {} catch {revertion = true;}
         if(u1_bal > 0) try  u4.doWithdraw(uint128(u4_bal)) {} catch {revertion = true;}
 
-        assert(revertion == false);
+        return !revertion;
     }
 
     // --- Copied from a test file ---
@@ -305,7 +284,7 @@ contract Fuzzer is E2E_swap {
         token1.approve(address(manager), 1000000 ether);
 
         helper_transferToAdds(users);
-
+        lastRebalancePrice = manager.getTargetTick();
         set = true;
     }
 
