@@ -136,12 +136,21 @@ contract E2E_swap {
         }
     }
 
+    function getPoolParams() internal returns(uint24 fee, int24 tickSpacing,int24 minTick,int24 maxTick,uint24 tickCount,uint160 startPrice, int24 startTick){
+        fee  = poolParams.fee;
+        tickSpacing  = poolParams.tickSpacing;
+        minTick  = poolParams.minTick;
+        maxTick  = poolParams.maxTick;
+        tickCount  = poolParams.tickCount;
+        startPrice  = poolParams.startPrice;
+        startTick  = poolParams.startTick;
+    }
     function forgePoolPositions(
         uint128 _seed,
         int24 _poolTickSpacing,
         uint24 _poolTickCount,
         int24 _poolMaxTick
-    ) internal view returns (PoolPositions memory poolPositions_) {
+    ) internal returns (PoolPositions memory poolPositions_) {
         // between 1 and 10 (inclusive) positions
         uint8 positionsCount = uint8(_seed % 10) + 1;
 
