@@ -379,6 +379,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         _position.uniLiquidity = _liquidity;
     }
 
+    event BAL(uint256 b);
+
     /**
      * @notice Helper function to burn a position
      * @param _lowerTick The lower bound of the range to deposit the liquidity to
@@ -395,18 +397,11 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         uint128 _burnedLiquidity,
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
-        (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(_position.id);
-
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
-
-        ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
-
         // Collect all owed
-        (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
-         ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
-
+        // (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
         // Update position. All other factors are still the same
-        ( _liquidity, , , , ) = pool.positions(_position.id);
+        (uint128 _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
 

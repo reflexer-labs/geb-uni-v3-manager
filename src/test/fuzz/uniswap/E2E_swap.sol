@@ -12,7 +12,7 @@ contract E2E_swap {
     SetupTokens tokens;
     SetupUniswap uniswap;
 
-    UniswapV3Pool pool;
+    UniswapV3Pool public pool;
 
     TestToken token0;
     TestToken token1;

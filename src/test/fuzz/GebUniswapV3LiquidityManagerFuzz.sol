@@ -217,6 +217,9 @@ contract Fuzzer is E2E_swap {
         }
     }
 
+         event LENS(uint256 k);
+
+
     function echidna_pool_is_always_solvent() public returns (bool) {
         if (!inited) {
             return true;
@@ -228,7 +231,13 @@ contract Fuzzer is E2E_swap {
         
         bool revertion = false;
 
+
         if(u1_bal > 0) try  u1.doWithdraw(uint128(u1_bal)) {} catch {revertion = true;}
+        (bytes32 id0, , , , ) =  manager.positions(0);
+        (, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, , ) = pool.positions(id0);
+
+        emit LENS(feeGrowthInside0LastX128);
+        emit LENS(feeGrowthInside1LastX128);
         if(u2_bal > 0) try  u2.doWithdraw(uint128(u2_bal)) {} catch {revertion = true;}
         if(u3_bal > 0) try  u3.doWithdraw(uint128(u3_bal)) {} catch {revertion = true;}
         if(u4_bal > 0) try  u4.doWithdraw(uint128(u4_bal)) {} catch {revertion = true;}
