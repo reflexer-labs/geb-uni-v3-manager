@@ -49,27 +49,7 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, token0Amount, token1Amount);
         u.doDeposit(liq);
     }
-
-    // --- Uniswap Callbacks ---
-    function uniswapV3MintCallback(
-        uint256 amount0Owed,
-        uint256 amount1Owed,
-        bytes calldata data
-    ) external {
-        testRai.transfer(msg.sender, amount0Owed);
-        testWeth.transfer(msg.sender, amount0Owed);
-    }
-
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
-    ) external {
-        if (amount1Delta > 0) token0.transfer(msg.sender, uint256(amount1Delta));
-        if (amount0Delta > 0) token1.transfer(msg.sender, uint256(amount0Delta));
-
-    }
-
+ 
     // --- Test Sanity Variables ---
     function test_sanity_uint_variables() public {
         uint256 _delay = manager.delay();
