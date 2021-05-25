@@ -8,7 +8,7 @@ A contract that manages Uniswap V3 positions for a pool containing a GEB system 
 
 This contract tries to solve the fungibility problem by wrapping LP positions into a single ERC20. In this specific use case, it's intended to concentrate liquidity around a [non-pegged stable asset](https://medium.com/reflexer-labs/stability-without-pegs-8c6a1cbc7fbd)'s redemption price (aka moving peg).
 
-## Overview of Single Tranche Manager
+## Overview of the Single Tranche Manager
 
 The contract `GebUniswapV3LiquidityManager` is the contract that manages positions in a single tranche. For each deposit, it fetches the current redemption price and moves all deposited liquidity into a narrow band around it (what's defined as `threshold`). If there are no deposits for a long period of time, it's possible to force a `rebalance` separately.
 
@@ -16,11 +16,11 @@ As an example, if the threshold is set at 50% and the current redemption price i
 
 This contract is still under active development and needs further testing as well as security audits.
 
-## Overview of Two Tranche Manager
+## Overview of the Two Tranche Manager
 
 The contract `GebUniswapV3TwoTrancheManager` is the contract that manages positions in two tranches.
 
-Imagine the following scenario with 3 tranches:
+Imagine the following scenario with 2 tranches:
 
 -   Tranche 1: 10% of treasury, with a threshold of 5%
 -   Tranche 2: 40% of treasury, with a threshold of 95%
