@@ -15,6 +15,12 @@ contract TestToken is ERC20 {
     function mintTo(address _recipient, uint256 _amount) public {
         _mint(_recipient, _amount);
     }
+    function mint(address _recipient, uint256 _amount) public {
+        _mint(_recipient, _amount);
+    }
+    function burn(address _recipient, uint256 _amount) public {
+        _burn(_recipient, _amount);
+    }
 }
 
 contract TestRAI is TestToken {
@@ -27,7 +33,6 @@ contract TestWETH is TestToken {
 
 abstract contract Hevm {
     function warp(uint256) public virtual;
-
     function roll(uint256) public virtual;
 }
 

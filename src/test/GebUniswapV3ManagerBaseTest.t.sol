@@ -8,14 +8,16 @@ import "./TestHelpers.sol";
 import "./OracleLikeMock.sol";
 
 contract GebUniswapV3ManagerBaseTest is DSTest {
-
     using SafeMath for uint256;
 
     Hevm hevm;
+
     GebUniswapV3ManagerBase manager_base;
     UniswapV3Pool pool;
+
     TestRAI testRai;
     TestWETH testWeth;
+
     OracleLikeMock oracle;
     PoolViewer pv;
 
@@ -30,7 +32,6 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
     PoolUser u4;
 
     PoolUser[4] public users;
-
 
     function setUp() virtual public {
         // Deploy GEB
@@ -61,7 +62,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
             z = 1;
         }
     }
-    
+
     // --- Helpers ---
     function helper_deployV3Pool(
         address _token0,
@@ -132,31 +133,53 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
     function helper_do_swap() public {
         (uint160 currentPrice, , , , , , ) = pool.slot0();
-       
+
         uint160 sqrtLimitPrice = currentPrice + 1 ether ;
         pool.swap(address(this), false, 1 ether, sqrtLimitPrice, bytes(""));
     }
 
-     function helper_assert_is_close(uint256 val1, uint256 val2) public {
+    function helper_assert_is_close(uint256 val1, uint256 val2) public {
         bool eq = val1 == val2;
         bool bg = val1 + 1 == val2;
         bool sm = val1 - 1 == val2;
         emit log_named_uint("eq", eq ? 1 :0);
         emit log_named_uint("bg", bg ? 1 :0);
         emit log_named_uint("sm", sm ? 1 :0);
-        assertTrue(eq || bg || sm); 
+        assertTrue(eq || bg || sm);
     }
-
 
     function helper_addWhaleLiquidity() public {
         uint256 token0Am = 1000 ether;
         uint256 token1Am = 1000 ether;
+
         int24 low = -887220;
         int24 upp = 887220;
+
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
         pool.mint(address(this), low, upp, 1000000000, bytes(""));
     }
 
+        
+
+     // --- Uniswap Callbacks ---
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external {
+        testRai.transfer(msg.sender, amount0Owed);
+        testWeth.transfer(msg.sender, amount0Owed);
+    }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        if (amount0Delta > 0) token0.transfer(msg.sender, uint256(amount0Delta));
+        if (amount1Delta > 0) token1.transfer(msg.sender, uint256(amount1Delta));
+
+    }
 
 }

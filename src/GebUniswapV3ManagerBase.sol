@@ -1,3 +1,27 @@
+/*
+MIT License
+
+Copyright (c) 2021 Reflexer Labs
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 pragma solidity 0.6.7;
 
 import { ERC20 } from "./erc20/ERC20.sol";
@@ -30,12 +54,11 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     // Flag to identify whether the system coin is token0 or token1. Needed for correct tick calculation
     bool systemCoinIsT0;
 
-    // --- Variables ---
+    // --- General Variables ---
     // The minimum delay required to perform a rebalance. Bounded to be between MINIMUM_DELAY and MAXIMUM_DELAY
     uint256 public delay;
     // The timestamp of the last rebalance
     uint256 public lastRebalance;
-
 
     // --- External Contracts ---
     // Address of the Uniswap v3 pool
@@ -102,7 +125,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     /**
      * @notice Checks whether msg.sender can call an authed function
      **/
-
     modifier isAuthorized() {
         require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
         _;
@@ -139,13 +161,15 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         tickSpacing = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        require(MIN_TICK % tickSpacing == 0,"GebUniswapv3LiquidityManager/invalid-max-tick-for-spacing");
-        require(MAX_TICK % tickSpacing == 0,"GebUniswapv3LiquidityManager/invalid-min-tick-for-spacing");
+        require(MIN_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-max-tick-for-spacing");
+        require(MAX_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-min-tick-for-spacing");
 
         delay = delay_;
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
         oracle = oracle_;
         poolViewer = poolViewer_;
+
+        emit AddAuthorization(msg.sender);
     }
 
     // --- Math ---
@@ -188,6 +212,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
      * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
+        require(data != address(0), "GebUniswapv3LiquidityManager/null-data");
+
         if (parameter == "oracle") {
           // If it's an invalid address, this tx will revert
           OracleForUniswapLike(data).getResultsWithValidity();
@@ -213,7 +239,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         (redemptionPrice, tokenPrice, valid) = oracle.getResultsWithValidity();
         require(valid, "GebUniswapv3LiquidityManager/invalid-price");
     }
-
 
     /**
      * @notice Function that returns the next target ticks based on the redemption price
@@ -251,7 +276,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         upperTick = targetTick + int24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + int24(_threshold);
     }
 
-
     function _getTokenAmountsFromLiquidity(Position storage _position, uint128 _liquidity) internal returns (uint256 amount0, uint256 amount1) {
         uint256 __supply = _totalSupply;
         uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
@@ -264,7 +288,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     }
 
     /**
-     * @notice Remove liquidity and withdraw the underlying assets
+     * @notice Add liquidity to this pool manager
      * @param _position The position to perform the operation
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
@@ -404,7 +428,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
          ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
-        
+
         // Update position. All other factors are still the same
         ( _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
