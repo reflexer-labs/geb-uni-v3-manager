@@ -147,7 +147,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
      * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
      */
-    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external override returns (uint256 mintAmount) {
+    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external payable override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapV3TwoTrancheManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-mint-at-once");
 

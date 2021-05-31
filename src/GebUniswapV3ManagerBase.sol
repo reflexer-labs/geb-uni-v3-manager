@@ -226,7 +226,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     }
 
     // --- Virtual functions  ---
-    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external virtual returns (uint256 mintAmount);
+    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external payable virtual returns (uint256 mintAmount);
     function withdraw(uint256 liquidityAmount, address recipient) external virtual returns (uint256 amount0, uint256 amount1);
     function rebalance() external virtual;
 

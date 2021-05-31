@@ -6,8 +6,6 @@ import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
 import "../erc20/ERC20.sol";
 
-import "ds-weth/weth9.sol";
-
 // --- Token Contracts ---
 contract TestToken is ERC20 {
     constructor(string memory _symbol, uint256 supply) public ERC20(_symbol, _symbol) {
@@ -67,6 +65,9 @@ contract PoolUser {
         weth = _w;
     }
 
+    receive() external payable {
+    }
+
     function doTransfer(
         address token,
         address to,
@@ -75,8 +76,12 @@ contract PoolUser {
         ERC20(token).transfer(to, amount);
     }
 
-    function doDeposit(uint128 liquidityAmount) public {
-        manager.deposit(liquidityAmount, address(this), 0, 0);
+    function doDeposit(uint128 liquidityAmount) public payable{
+        manager.deposit{value:msg.value}(liquidityAmount, address(this), 0, 0);
+    }
+
+    function doDepositWithSlippage(uint128 liquidityAmount, uint256 minAm0, uint256 minAm1) public payable{
+        manager.deposit{value:msg.value}(liquidityAmount, address(this), minAm0, minAm1);
     }
 
     function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {
