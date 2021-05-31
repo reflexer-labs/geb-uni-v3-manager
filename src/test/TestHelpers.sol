@@ -6,6 +6,8 @@ import "../uni/UniswapV3Factory.sol";
 import "../uni/UniswapV3Pool.sol";
 import "../erc20/ERC20.sol";
 
+import "ds-weth/weth9.sol";
+
 // --- Token Contracts ---
 contract TestToken is ERC20 {
     constructor(string memory _symbol, uint256 supply) public ERC20(_symbol, _symbol) {
@@ -29,6 +31,17 @@ contract TestRAI is TestToken {
 
 contract TestWETH is TestToken {
     constructor(string memory _symbol) public TestToken(_symbol, 300000000 ether) {}
+
+    function fallback() external payable {
+        deposit();
+    }
+    function deposit() public payable {
+        _mint(msg.sender, msg.value);
+    }
+    function withdraw(uint wad) public {   
+        _burn(msg.sender,wad);
+        msg.sender.transfer(wad);
+    }
 }
 
 abstract contract Hevm {
