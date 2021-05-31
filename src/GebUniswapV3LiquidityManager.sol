@@ -43,6 +43,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both token prices
+     * @param wethAddress_ Address of the WETH9 contract
      */
     constructor(
         string memory name_,
@@ -52,8 +53,9 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         uint256 delay_,
         address pool_,
         OracleForUniswapLike oracle_,
-        PoolViewer poolViewer_
-    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_) {
+        PoolViewer poolViewer_,
+        address wethAddress_
+    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapV3LiquidityManager/invalid-threshold");
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapV3LiquidityManager/threshold-incompatible-w/-tick-spacing");
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapV3LiquidityManager/invalid-delay");
@@ -100,17 +102,20 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @notice Add liquidity to this pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
-     * @dev In case of a multi-tranche scenario, rebalancing all tranches might be too expensive for the end user.
-     *      A round robin could be done where, in each deposit, only one of the pool's positions is rebalanced
+     * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
+     * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
      */
-    function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
+    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapV3LiquidityManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapV3LiquidityManager/too-much-to-mint-at-once");
+        require(newLiquidity > 0, "GebUniswapV3LiquidityManager/minting-zero-liquidity");
 
         uint128 totalLiquidity = position.uniLiquidity;
         int24 target= getTargetTick();
 
-        _deposit(position, uint128(newLiquidity), target);
+        (uint256 amt0, uint256 amt1) = _deposit(position, uint128(newLiquidity), target);
+
+        require(amt0 >= minAm0 && amt1 >= minAm1,"GebUniswapV3LiquidityManager/slippage-check");
 
         // Calculate and mint a user's ERC20 liquidity tokens
         uint256 __supply = _totalSupply;

@@ -64,7 +64,7 @@ contract Fuzzer is E2E_swap {
             setUp();
         }
         if (!inited) _init(liquidityAmount);
-        manager.deposit(liquidityAmount, address(this));
+        manager.deposit(liquidityAmount, address(this),0,0);
     }
 
     function withdrawForRecipient(address recipient, uint128 liquidityAmount) public {
@@ -245,7 +245,7 @@ contract Fuzzer is E2E_swap {
         oracle = new OracleLikeMock();
         pv = new PoolViewer();
 
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), oracle, pv);
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, address(pool), oracle, pv,address(0));
 
         u1 = new FuzzUser(manager, token0, token1);
         u2 = new FuzzUser(manager, token0, token1);

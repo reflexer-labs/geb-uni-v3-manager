@@ -49,6 +49,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @param delay_ The minimum required time before rebalance() can be called
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both prices
+     * @param wethAddress_ Address of the WETH9 contract
      */
     constructor(
       string memory name_,
@@ -61,8 +62,9 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       uint128 ratio_2,
       address pool_,
       OracleForUniswapLike oracle_,
-      PoolViewer poolViewer_
-    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_) {
+      PoolViewer poolViewer_,
+      address wethAddress_
+    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
         require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold");
         require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
@@ -142,19 +144,26 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @notice Add liquidity to this Uniswap pool manager
      * @param newLiquidity The amount of liquidty that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
-     * @dev In case of a multi-tranche scenario, rebalancing all tranches might be too expensive for the ende user.
-     *      A round robin could be done where in each deposit only one of the pool's positions is rebalanced
+     * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
+     * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
      */
-    function deposit(uint256 newLiquidity, address recipient) external override returns (uint256 mintAmount) {
+    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external override returns (uint256 mintAmount) {
         require(recipient != address(0), "GebUniswapV3TwoTrancheManager/invalid-recipient");
         require(newLiquidity < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-mint-at-once");
 
         uint128 totalLiquidity = positions[0].uniLiquidity.add(positions[1].uniLiquidity);
-        int24 target= getTargetTick();
+        { //Avoid stack too deep
+          int24 target= getTargetTick();
 
-        _deposit(positions[0], getAmountFromRatio(uint128(newLiquidity), ratio1), target);
-        _deposit(positions[1], getAmountFromRatio(uint128(newLiquidity), ratio2), target);
+          uint128 liq1 = getAmountFromRatio(uint128(newLiquidity), ratio1);
+          uint128 liq2 = getAmountFromRatio(uint128(newLiquidity), ratio2);
 
+          require(liq1 > 0 && liq2 > 0, "GebUniswapV3TwoTrancheManager/minting-zero-liquidity");
+
+          (uint256 pos0Am0, uint256 pos0Am1) = _deposit(positions[0], liq1, target);
+          (uint256 pos1Am0, uint256 pos1Am1) = _deposit(positions[1], liq2, target);
+          require(pos0Am0.add(pos1Am0) >= minAm0 && pos0Am1.add(pos1Am1) >= minAm1,"GebUniswapV3TwoTrancheManager/slippage-check");
+        }
         uint256 __supply = _totalSupply;
         if (__supply == 0) {
           mintAmount = newLiquidity;
@@ -164,6 +173,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
 
         _mint(recipient, mintAmount);
 
+        refundETH();
         emit Deposit(msg.sender, recipient, newLiquidity);
     }
 

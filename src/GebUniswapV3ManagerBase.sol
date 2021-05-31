@@ -24,11 +24,12 @@ SOFTWARE.
 
 pragma solidity 0.6.7;
 
-import { ERC20 } from "./erc20/ERC20.sol";
+// import { ERC20 } from "./erc20/ERC20.sol";
 import "./PoolViewer.sol";
+import "./PeripheryPayments.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
-import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
+// import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
@@ -39,7 +40,7 @@ abstract contract OracleForUniswapLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-abstract contract GebUniswapV3ManagerBase is ERC20 {
+abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -146,8 +147,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
       uint256 delay_,
       address pool_,
       OracleForUniswapLike oracle_,
-      PoolViewer poolViewer_
-    ) public ERC20(name_, symbol_) {
+      PoolViewer poolViewer_,
+      address weth9Address
+    ) public ERC20(name_, symbol_) PherypheryPayments(weth9Address) {
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
         authorizedAccounts[msg.sender] = 1;
@@ -224,7 +226,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
     }
 
     // --- Virtual functions  ---
-    function deposit(uint256 newLiquidity, address recipient) external virtual returns (uint256 mintAmount);
+    function deposit(uint256 newLiquidity, address recipient, uint256 minAm0, uint256 minAm1) external virtual returns (uint256 mintAmount);
     function withdraw(uint256 liquidityAmount, address recipient) external virtual returns (uint256 amount0, uint256 amount1);
     function rebalance() external virtual;
 
@@ -293,41 +295,29 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
      */
-    function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal{
-        (int24 _currentLowerTick, int24 _currentUpperTick) = (_position.lowerTick, _position.upperTick);
-        uint128 previousLiquidity = _position.uniLiquidity;
+    function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal returns(uint256 amount0,uint256 amount1){
+        (int24 _nextLowerTick,int24 _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
 
-        (int24 _nextLowerTick, int24 _nextUpperTick) = (0, 0);
-        (_nextLowerTick, _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
+        { // Scope to avoid stack too deep
+          uint128 compoundLiquidity = 0;
+          uint256 collected0 = 0;
+          uint256 collected1 = 0;
 
+          if (_position.uniLiquidity > 0 && (_position.lowerTick != _nextLowerTick || _position.upperTick != _nextUpperTick)) {
+            // 1. Burn and collect all liquidity
+            (collected0, collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
 
-        uint128 compoundLiquidity = 0;
-        uint256 collected0 = 0;
-        uint256 collected1 = 0;
+            // 2. Figure how much liquidity we can get from our current balances
+            compoundLiquidity = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,collected0,collected1);
+            require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
 
-        // A possible optimization is to only rebalance if the tick diff is significant enough
-        if (previousLiquidity > 0 && (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick)) {
-          // 1. Burn and collect all liquidity
-          (collected0, collected1) = _burnOnUniswap(_position, _currentLowerTick, _currentUpperTick, _position.uniLiquidity, address(this));
-
-          // 2. Figure how much liquidity we can get from our current balances
-          (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-
-          compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtRatioX96,
-            TickMath.getSqrtRatioAtTick(_nextLowerTick),
-            TickMath.getSqrtRatioAtTick(_nextUpperTick),
-            collected0.add(1),
-            collected1.add(1)
-          );
-
-          emit Rebalance(msg.sender, block.timestamp);
+            emit Rebalance(msg.sender, block.timestamp);
+          }
+          // 3. Mint our new position on Uniswap
+          lastRebalance = block.timestamp;
+          (uint256 amount0Minted, uint256 amount1Minted) = _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity+compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+          (amount0, amount1) = (amount0Minted - collected0, amount1Minted - collected1);
         }
-
-        // 3. Mint our new position on Uniswap
-        require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
-        _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity+compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
-        lastRebalance = block.timestamp;
     }
 
     /**
@@ -392,8 +382,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         int24 _upperTick,
         uint128 _totalLiquidity,
         bytes memory _callbackData
-    ) internal {
-        pool.mint(address(this), _lowerTick, _upperTick, _totalLiquidity, _callbackData);
+    ) internal returns(uint256 amount0, uint256 amount1) {
+        (amount0, amount1) = pool.mint(address(this), _lowerTick, _upperTick, _totalLiquidity, _callbackData);
         _position.lowerTick = _lowerTick;
         _position.upperTick = _upperTick;
 
@@ -434,6 +424,18 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
         _position.uniLiquidity = _liquidity;
     }
 
+    function _getCompoundLiquidity(int24 _nextLowerTick, int24 _nextUpperTick, uint256 _collected0, uint256 _collected1) internal view returns(uint128 compoundLiquidity){
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+
+        compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+          sqrtRatioX96,
+          TickMath.getSqrtRatioAtTick(_nextLowerTick),
+          TickMath.getSqrtRatioAtTick(_nextUpperTick),
+          _collected0.add(1),
+          _collected1.add(1)
+        );
+    }
+
     /**
      * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
@@ -459,10 +461,10 @@ abstract contract GebUniswapV3ManagerBase is ERC20 {
 
         // Pay what the sender owes
         if (amount0Owed > amt0FromThis) {
-          TransferHelper.safeTransferFrom(token0, sender, msg.sender, amount0Owed - amt0FromThis);
+          pay(token0, sender, msg.sender, amount0Owed - amt0FromThis);
         }
         if (amount1Owed > amt1FromThis) {
-          TransferHelper.safeTransferFrom(token1, sender, msg.sender, amount1Owed - amt1FromThis);
+          pay(token1, sender, msg.sender, amount1Owed - amt1FromThis);
         }
     }
 }

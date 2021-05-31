@@ -290,7 +290,7 @@ contract FuzzUser {
     }
 
     function doDeposit(uint128 liquidityAmount) public {
-        manager.deposit(liquidityAmount, address(this));
+        manager.deposit(liquidityAmount, address(this),0,0);
     }
 
     function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {
