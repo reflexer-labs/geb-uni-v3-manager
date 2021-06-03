@@ -364,8 +364,45 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
               collected1.add(1)
             );
 
-          _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+          (uint256 am0, uint256 am1) = _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
+
+          uint256 swapAmount0 = collected0.add(1) - am0;
+          uint256 swapAmount1 = collected1.add(1) - am1;
+          _swapOutstanding(_position, swapAmount0, swapAmount1);
         }
+    }
+
+    function _swapOutstanding(Position storage _position, uint256 swapAmount0,uint256 swapAmount1) internal {
+       (int24 lowerTick, int24 upperTick) = (_position.lowerTick, _position.upperTick);
+       pool.positions(_position.id);
+      if (swapAmount0 > 0 || swapAmount1 > 0) {
+            // TODO: this is a hacky method that only works at somewhat-balanced pools
+            bool zeroForOne = swapAmount0 > swapAmount1;
+            (int256 amount0Delta, int256 amount1Delta) = pool.swap(
+              address(this),
+              zeroForOne,
+              int256(zeroForOne ? swapAmount0 : swapAmount1) / 2,
+              zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+              abi.encode(address(this))
+            );
+            pool.positions(_position.id);
+
+            swapAmount0 = uint256(int256(swapAmount0) - amount0Delta);
+            swapAmount1 = uint256(int256(swapAmount1) - amount1Delta);
+
+            // Add liquidity a second time
+            (uint160 sqrtRatioX96,,,,,,) = pool.slot0();
+            uint128 swapLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+              sqrtRatioX96,
+              TickMath.getSqrtRatioAtTick(lowerTick),
+              TickMath.getSqrtRatioAtTick(upperTick),
+              swapAmount0,
+              swapAmount1
+            );
+
+            _mintOnUniswap(_position, lowerTick, upperTick, swapLiquidity, abi.encode(msg.sender, swapAmount0, swapAmount1));
+
+          }
     }
 
     // --- Uniswap Related Functions ---
@@ -383,6 +420,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         uint128 _totalLiquidity,
         bytes memory _callbackData
     ) internal returns(uint256 amount0, uint256 amount1) {
+        pool.positions(_position.id);
         (amount0, amount1) = pool.mint(address(this), _lowerTick, _upperTick, _totalLiquidity, _callbackData);
         _position.lowerTick = _lowerTick;
         _position.upperTick = _upperTick;
@@ -409,18 +447,12 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         uint128 _burnedLiquidity,
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
-        (uint128 _liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1) = pool.positions(_position.id);
-
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
-
-        ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
-
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
-         ( _liquidity,  feeGrowthInside0LastX128,  feeGrowthInside1LastX128,  tokensOwed0,  tokensOwed1) = pool.positions(_position.id);
 
         // Update position. All other factors are still the same
-        ( _liquidity, , , , ) = pool.positions(_position.id);
+        (uint128 _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
 
@@ -453,10 +485,18 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
         // Pay what this contract owes
         if (amt0FromThis > 0) {
-          TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
+          if (amt0FromThis >= amount0Owed) {
+            TransferHelper.safeTransfer(token0, msg.sender, amount0Owed);
+          } else {
+            TransferHelper.safeTransfer(token0, msg.sender, amt0FromThis);
+          }
         }
         if (amt1FromThis > 0) {
-          TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
+          if (amt1FromThis >= amount1Owed) {
+            TransferHelper.safeTransfer(token1, msg.sender, amount1Owed);
+          } else {
+            TransferHelper.safeTransfer(token1, msg.sender, amt1FromThis);
+          }
         }
 
         // Pay what the sender owes
@@ -467,4 +507,28 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
           pay(token1, sender, msg.sender, amount1Owed - amt1FromThis);
         }
     }
+
+    function uniswapV3SwapCallback(
+      int256 amount0Delta,
+      int256 amount1Delta,
+      bytes calldata /*data*/
+    ) external {
+      require(msg.sender == address(pool));
+
+      if (amount0Delta > 0) {
+        TransferHelper.safeTransfer(token0, msg.sender, uint256(amount0Delta));
+      } else if (amount1Delta > 0) {
+        TransferHelper.safeTransfer(token1, msg.sender, uint256(amount1Delta));
+      }
+    }
 }
+
+
+  // collect
+  //2999999999999999999982
+  //2249999816700733368
+
+  //mintCallback
+  //2999975488916253413161
+  //2249999816700733369
+

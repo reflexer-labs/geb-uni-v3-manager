@@ -254,11 +254,14 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         (,,,,uint256 __threshold) = manager.position();
         (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
 
+        emit log_named_uint("r", 77);
+
         // The lower bound might still be the same, since it's currently the MIN_TICK
         assertTrue(init_lowerTick != newLower);
         assertTrue(init_upperTick != newUpper);
 
         manager.rebalance();
+        emit log_named_uint("k", 99);
 
         (uint128 _liquidity, , , , ) = pool.positions(init_id);
         assertTrue(_liquidity == 0); //We should have burned the whole old position
@@ -267,10 +270,38 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
 
         assertTrue(end_lowerTick == newLower);
         assertTrue(end_upperTick == newUpper);
+    }
 
-        // emit log_named_uint("end_uniLiquidity", end_uniLiquidity);
-        // emit log_named_uint("init_uniLiquidity", init_uniLiquidity);
-        assertTrue(end_uniLiquidity <= init_uniLiquidity);
+    function test_deposit_rebalance_withdraw() public {
+
+        uint256 initBal0 = token0.balanceOf(address(u1));
+        uint256 initBal1 = token1.balanceOf(address(u1));
+        helper_addLiquidity(1);
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+
+        helper_changeRedemptionPrice(3500000000 ether); // Making RAI cheaper
+        hevm.warp(2 days); // Advance to the future
+        manager.rebalance();
+        (bytes32 id,,,,) = manager.position();
+        (,,,uint256 zerOwned,uint256 oneOwed) = pool.positions(id);
+        emit log_named_uint("zerOwned", zerOwned);
+        emit log_named_uint("oneOwed", oneOwed);
+
+        u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
+        uint256 finBal0 = token0.balanceOf(address(u1));
+        uint256 finBal1 = token1.balanceOf(address(u1));
+        (,,, zerOwned, oneOwed) = pool.positions(id);
+        emit log_named_uint("zerOwned", zerOwned);
+        emit log_named_uint("oneOwed", oneOwed);
+
+
+        emit log_named_uint("initBal0", initBal0);
+        emit log_named_uint("initBal1", initBal1);
+        emit log_named_uint("finBal0", finBal0);
+        emit log_named_uint("finBal1", finBal1);
+        assertTrue(initBal0 < finBal0);
+        assertTrue(initBal1 > finBal1);
     }
 
     function testFail_early_rebalancing() public {

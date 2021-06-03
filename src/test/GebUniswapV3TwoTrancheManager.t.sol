@@ -239,7 +239,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
 
 
 
-    function test_liquidty_proportional_to_balance() public {
+    function test_liquidty_proportional_to_balanceB() public {
         testRai.approve(address(manager), 10);
         testWeth.approve(address(manager), 10);
         helper_addLiquidity(1);
@@ -254,12 +254,18 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         helper_changeRedemptionPrice(1200000000 ether);
         hevm.warp(2 days);
 
-        manager.rebalance();
 
-        // (bytes32 id, , , uint128 uniLiquidity1) = manager.position();
-        // (uint128 _liquidity, , , , ) = pool.positions(id);
-        // emit log_named_uint("_liquidity", _liquidity);
-        // emit log_named_uint("liq", uniLiquidity1);
+    
+        (uint256 bal00) = token0.balanceOf(address(manager));
+        (uint256 bal01) = token1.balanceOf(address(manager));
+        manager.rebalance();
+        (uint256 bal10) = token0.balanceOf(address(manager));
+        (uint256 bal11) = token1.balanceOf(address(manager));
+
+        emit log_named_uint("bal00", bal00); // 99999586913702
+        emit log_named_uint("bal10", bal10); // 99998743003300
+        emit log_named_uint("bal01", bal01); // 99199754914029
+        emit log_named_uint("bal11", bal11); // 097604052593458
 
         // user should be able to withdraw it's whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
