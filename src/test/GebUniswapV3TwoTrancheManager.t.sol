@@ -39,7 +39,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     }
 
     function helper_addLiquidity(uint8 user) public {
-        // (bytes32 i_id, , , uint128 i_uniLiquidity,) = manager.position();
+        // (bytes32 i_id, , , uint128 i_uniLiquidity,,,) = manager.position();
         // (uint128 i_liquidity, , , , ) = pool.positions(i_id);
         PoolUser u = users[(user - 1) % 4];
         uint256 wethAmount = 3000 ether;
@@ -61,12 +61,12 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     }
 
     function test_sanity_positions() public {
-        (,,,,uint256 _threshold1) = manager.positions(0);
+        (,,,,uint256 _threshold1,,) = manager.positions(0);
         assertTrue(_threshold1 == threshold1);
         uint256 _ratio1 = manager.ratio1();
         assertTrue(_ratio1 == ratio1);
 
-        (,,,,uint256 _threshold2) = manager.positions(1);
+        (,,,,uint256 _threshold2,,) = manager.positions(1);
         assertTrue(_threshold2 == threshold2);
         uint256 _ratio2 = manager.ratio2();
         assertTrue(_ratio2 == ratio2);
@@ -272,8 +272,8 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
 
         assertTrue(manager.totalSupply() == 0);
 
-        (bytes32 id0, , , uint128 uniLiquidity0,) = manager.positions(0);
-        (bytes32 id1, , , uint128 uniLiquidity1,) = manager.positions(1);
+        (bytes32 id0, , , uint128 uniLiquidity0,,,) = manager.positions(0);
+        (bytes32 id1, , , uint128 uniLiquidity1,,,) = manager.positions(1);
 
         assert(uniLiquidity0 == 0);
         assert(uniLiquidity1 == 0);

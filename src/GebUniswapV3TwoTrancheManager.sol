@@ -84,7 +84,9 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
           lowerTick: lower_1,
           upperTick: upper_1,
           uniLiquidity: 0,
-          threshold: threshold_1
+          threshold: threshold_1,
+          tkn0Reserve:0,
+          tkn1Reserve:0
         });
 
         (int24 lower_2, int24 upper_2) = getTicksWithThreshold(target, threshold_2);
@@ -93,7 +95,9 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
           lowerTick: lower_2,
           upperTick: upper_2,
           uniLiquidity: 0,
-          threshold: threshold_2
+          threshold: threshold_2,
+          tkn0Reserve:0,
+          tkn1Reserve:0
         });
     }
 

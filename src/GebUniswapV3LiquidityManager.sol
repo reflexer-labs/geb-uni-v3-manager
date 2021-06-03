@@ -63,7 +63,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         int24 target = getTargetTick();
         (int24 lower, int24 upper) = getTicksWithThreshold(target, threshold_);
 
-        position = Position({ id: keccak256(abi.encodePacked(address(this), lower, upper)), lowerTick: lower, upperTick: upper, uniLiquidity: 0, threshold: threshold_ });
+        position = Position({ id: keccak256(abi.encodePacked(address(this), lower, upper)), lowerTick: lower, upperTick: upper, uniLiquidity: 0, threshold: threshold_, tkn0Reserve:0,tkn1Reserve:0 });
     }
 
     // --- Getters ---

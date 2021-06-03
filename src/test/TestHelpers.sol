@@ -30,7 +30,7 @@ contract TestRAI is TestToken {
 contract TestWETH is TestToken {
     constructor(string memory _symbol) public TestToken(_symbol, 300000000 ether) {}
 
-    function fallback() external payable {
+    fallback() external payable {
         deposit();
     }
     function deposit() public payable {

@@ -91,6 +91,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
       int24 upperTick;
       uint128 uniLiquidity;
       uint256 threshold;
+      uint256 tkn0Reserve;
+      uint256 tkn1Reserve;
     }
 
     // --- Events ---
@@ -300,23 +302,23 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
         { // Scope to avoid stack too deep
           uint128 compoundLiquidity = 0;
-          uint256 collected0 = 0;
-          uint256 collected1 = 0;
+          uint256 used0 = 0;
+          uint256 used1 = 0;
 
           if (_position.uniLiquidity > 0 && (_position.lowerTick != _nextLowerTick || _position.upperTick != _nextUpperTick)) {
             // 1. Burn and collect all liquidity
-            (collected0, collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
+            (uint256 collected0, uint256 collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
 
             // 2. Figure how much liquidity we can get from our current balances
-            compoundLiquidity = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,collected0,collected1);
+            (compoundLiquidity, used0, used1) = _getCompoundLiquidity(_position, _nextLowerTick,_nextUpperTick,collected0,collected1);
             require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
 
             emit Rebalance(msg.sender, block.timestamp);
           }
           // 3. Mint our new position on Uniswap
           lastRebalance = block.timestamp;
-          (uint256 amount0Minted, uint256 amount1Minted) = _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity+compoundLiquidity, abi.encode(msg.sender, collected0, collected1));
-          (amount0, amount1) = (amount0Minted - collected0, amount1Minted - collected1);
+          (uint256 amount0Minted, uint256 amount1Minted) = _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, _newLiquidity+compoundLiquidity, abi.encode(msg.sender, used0, used1));
+          (amount0, amount1) = (amount0Minted - used0, amount1Minted - used1);
         }
     }
 
@@ -374,9 +376,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
     function _swapOutstanding(Position storage _position, uint256 swapAmount0,uint256 swapAmount1) internal {
        (int24 lowerTick, int24 upperTick) = (_position.lowerTick, _position.upperTick);
-       pool.positions(_position.id);
       if (swapAmount0 > 0 || swapAmount1 > 0) {
-            // TODO: this is a hacky method that only works at somewhat-balanced pools
+        uint128 swapLiquidity;
+        {
             bool zeroForOne = swapAmount0 > swapAmount1;
             (int256 amount0Delta, int256 amount1Delta) = pool.swap(
               address(this),
@@ -385,23 +387,23 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
               zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
               abi.encode(address(this))
             );
-            pool.positions(_position.id);
 
             swapAmount0 = uint256(int256(swapAmount0) - amount0Delta);
             swapAmount1 = uint256(int256(swapAmount1) - amount1Delta);
 
             // Add liquidity a second time
             (uint160 sqrtRatioX96,,,,,,) = pool.slot0();
-            uint128 swapLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+            swapLiquidity = LiquidityAmounts.getLiquidityForAmounts(
               sqrtRatioX96,
               TickMath.getSqrtRatioAtTick(lowerTick),
               TickMath.getSqrtRatioAtTick(upperTick),
               swapAmount0,
               swapAmount1
             );
-
-            _mintOnUniswap(_position, lowerTick, upperTick, swapLiquidity, abi.encode(msg.sender, swapAmount0, swapAmount1));
-
+        }
+            (uint256 amt0Minted, uint256 amt1Minted) = _mintOnUniswap(_position, lowerTick, upperTick, swapLiquidity, abi.encode(msg.sender, swapAmount0, swapAmount1));
+            _position.tkn0Reserve = swapAmount0.sub(amt0Minted);
+            _position.tkn1Reserve = swapAmount1.sub(amt1Minted);
           }
     }
 
@@ -456,16 +458,20 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         _position.uniLiquidity = _liquidity;
     }
 
-    function _getCompoundLiquidity(int24 _nextLowerTick, int24 _nextUpperTick, uint256 _collected0, uint256 _collected1) internal view returns(uint128 compoundLiquidity){
+    function _getCompoundLiquidity(Position storage _position, int24 _nextLowerTick, int24 _nextUpperTick, uint256 _collected0, uint256 _collected1) internal view returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        // uint160 lowerSqrtRatio = TickMath.getSqrtRatioAtTick(_nextLowerTick);
+        // uint160 upperSqrtRatio = TickMath.getSqrtRatioAtTick(_nextUpperTick);
 
         compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
           sqrtRatioX96,
           TickMath.getSqrtRatioAtTick(_nextLowerTick),
           TickMath.getSqrtRatioAtTick(_nextUpperTick),
-          _collected0.add(1),
-          _collected1.add(1)
+          _collected0.add(_position.tkn0Reserve),
+          _collected1.add(_position.tkn1Reserve)
         );
+
+        (tkn0Amount,tkn1Amount) = LiquidityAmounts.getAmountsForLiquidity(sqrtRatioX96,TickMath.getSqrtRatioAtTick(_nextLowerTick),TickMath.getSqrtRatioAtTick(_nextUpperTick),compoundLiquidity);
     }
 
     /**
@@ -522,13 +528,3 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
       }
     }
 }
-
-
-  // collect
-  //2999999999999999999982
-  //2249999816700733368
-
-  //mintCallback
-  //2999975488916253413161
-  //2249999816700733369
-

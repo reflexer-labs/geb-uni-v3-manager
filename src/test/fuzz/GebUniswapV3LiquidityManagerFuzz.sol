@@ -154,7 +154,7 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, , , uint128 liq,) = manager.position();
+        (bytes32 posId, , , uint128 liq,,,) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(posId);
         return (liq == _liquidity);
     }
@@ -163,7 +163,7 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, , , ,) = manager.position();
+        (bytes32 posId, , , ,,,) = manager.position();
         (uint128 _liquidity, , , , ) = pool.positions(posId);
         if (manager.totalSupply() > 0) return (_liquidity > 0);
         return true; // If there's no supply it's fine
@@ -173,7 +173,7 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, int24 low, int24 up, uint128 liq,) = manager.position();
+        (bytes32 posId, int24 low, int24 up, uint128 liq,,,) = manager.position();
         bytes32 id = keccak256(abi.encodePacked(address(manager), low, up));
         return (posId == id);
     }
@@ -184,7 +184,7 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (bytes32 posId, int24 lower, int24 upper, ,uint256 _threshold) = manager.position();
+        (bytes32 posId, int24 lower, int24 upper, ,uint256 _threshold,,) = manager.position();
         return (lower + int24(_threshold) >= lastRebalancePrice && upper - int24(_threshold) <= lastRebalancePrice);
     }
 
@@ -216,7 +216,7 @@ contract Fuzzer is E2E_swap {
         if (!inited) {
             return true;
         }
-        (, , , uint128 liq,) = manager.position();
+        (, , , uint128 liq,,,) = manager.position();
         if (liq > 0) {
             return manager.totalSupply() > 0;
         } else {
