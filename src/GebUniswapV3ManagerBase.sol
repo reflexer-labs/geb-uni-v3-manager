@@ -254,6 +254,10 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
        (_nextLower,  _nextUpper) = getTicksWithThreshold(targetTick, _threshold);
     }
 
+    /**
+     * @notice Function that returns the target ticks based on the redemption price
+     * @return targetTick The target tick that represents the redemption price
+     */
     function getTargetTick() public returns(int24 targetTick){
          // 1. Get prices from the oracle relayer
         (uint256 redemptionPrice, uint256 ethUsdPrice) = getPrices();
@@ -274,12 +278,27 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         targetTick = approximatedTick - (approximatedTick % tickSpacing);
     }
 
+     /**
+     * @notice Function that returns the next target ticks based on the target tick
+     * @param targetTick The tick representing the redemption price
+     * @param _threshold The threshold used to find ticks
+     * @return lowerTick The lower bound of the range
+     * @return upperTick The upper bound of the range
+     */
     function getTicksWithThreshold(int24 targetTick, uint256 _threshold) public pure returns(int24 lowerTick, int24 upperTick){
         // 5. Find lower and upper bounds for the next position
         lowerTick = targetTick - int24(_threshold) < MIN_TICK ? MIN_TICK : targetTick - int24(_threshold);
         upperTick = targetTick + int24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + int24(_threshold);
     }
 
+
+    /**
+     * @notice An internal fview function that allows simulating a withdraw and returning the amount of each token received
+     * @param _position The position to perform the operation
+     * @param _liquidity The amount of liquidity to be withdrawn
+     * @return amount0 The amount of token0
+     * @return amount1 The amount of token1
+     */
     function _getTokenAmountsFromLiquidity(Position storage _position, uint128 _liquidity) internal returns (uint256 amount0, uint256 amount1) {
         uint256 __supply = _totalSupply;
         uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
@@ -291,12 +310,15 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         (amount0, amount1) = abi.decode(ret, (uint256, uint256));
     }
 
+
+    // --- Core user actions ---
     /**
      * @notice Add liquidity to this pool manager
      * @param _position The position to perform the operation
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
      */
+     
     function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal returns(uint256 amount0,uint256 amount1){
         (int24 _nextLowerTick,int24 _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
 
@@ -351,25 +373,73 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         emit Rebalance(msg.sender, block.timestamp);
     }
 
+    // --- Internal helpers ---
+    /**
+     * @notice Helper function to mint a position
+     * @param _nextLowerTick The lower bound of the range to deposit the liquidity to
+     * @param _nextUpperTick The upper bound of the range to deposit the liquidity to
+     * @param _amount0 The total amount of token0 to use in the calculations
+     * @param _amount1 The total amount of token1 to use in the calculations
+     * @return compoundLiquidity The amount of total liquidity to be minted
+     * @return tkn0Amount The amount of token0 that will be used
+     * @return tkn1Amount The amount of token1 that will be used
+     */
+    function _getCompoundLiquidity(int24 _nextLowerTick, int24 _nextUpperTick, uint256 _amount0, uint256 _amount1) internal view returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
+        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        uint160 lowerSqrtRatio = TickMath.getSqrtRatioAtTick(_nextLowerTick);
+        uint160 upperSqrtRatio = TickMath.getSqrtRatioAtTick(_nextUpperTick);
+
+        compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+          sqrtRatioX96,
+          lowerSqrtRatio,
+          upperSqrtRatio,
+          _amount0,
+          _amount1
+        );
+
+        (tkn0Amount,tkn1Amount) = LiquidityAmounts.getAmountsForLiquidity(sqrtRatioX96,lowerSqrtRatio,upperSqrtRatio,compoundLiquidity);
+    }
+
+    /**
+     * @notice This functions perform actions to optimize the liquidity received
+      * @param _position The position to perform operations on
+     * @param _nextLowerTick The lower bound of the range to deposit the liquidity to
+     * @param _nextUpperTick The upper bound of the range to deposit the liquidity to
+     * @return compoundLiquidity The amount of total liquidity to be minted
+     * @return tkn0Amount The amount of token0 that will be used
+     * @return tkn1Amount The amount of token1 that will be used
+     */
     function getMaxLiquidity(Position storage _position, int24 _nextLowerTick, int24 _nextUpperTick) internal returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
-       // Get the fees
+      // Burn the existing position and get the fees
       (uint256 collected0, uint256 collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
 
       uint256 partialAmount0 = collected0.add(_position.tkn0Reserve);
       uint256 partialAmount1 = collected1.add(_position.tkn1Reserve);
-      // Figure how much liquidity we can get from our current balances
+
+      // Calculatehow much liquidity we can get from what's been collect + what we have in the reserves
       (, uint256 used0, uint256 used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0,partialAmount1);
+
+      // Take the leftover amounts and do a swap to get a bit more liquidity
       (uint256 newAmount0, uint256 newAmount1) = _swapOutstanding(_position, partialAmount0.sub(used0), partialAmount1.sub(used1));
-      // with our new amounts, calculate again how much liquidity we can get
+      
+      // With new amounts, calculate again how much liquidity we can get
       (compoundLiquidity,  used0,  used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
 
-      // // Update our reserves
+      // Update our reserves
       _position.tkn0Reserve = partialAmount0.add(newAmount0).sub(used0);
       _position.tkn1Reserve = partialAmount1.add(newAmount1).sub(used1);
       tkn0Amount = used0;
       tkn1Amount = used1;
     }
 
+    /**
+     * @notice Perform a swap on the uni pool to have a balanced position
+      * @param _position The position to perform operations on
+     * @param swapAmount0 The amount of token0 that will be used
+     * @param swapAmount1 The amount of token1 that will be used
+     * @return newAmount0 The new amount of token0 received
+     * @return newAmount1 The new amount of token1 received
+     */
     function _swapOutstanding(Position storage _position, uint256 swapAmount0,uint256 swapAmount1) internal returns(uint256 newAmount0,uint256 newAmount1) {
       if (swapAmount0 > 0 || swapAmount1 > 0) {
             bool zeroForOne = swapAmount0 > swapAmount1;
@@ -436,24 +506,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         (uint128 _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
-
-    event CMP(uint256 a);
-    function _getCompoundLiquidity(int24 _nextLowerTick, int24 _nextUpperTick, uint256 _amount0, uint256 _amount1) internal returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
-        (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
-        uint160 lowerSqrtRatio = TickMath.getSqrtRatioAtTick(_nextLowerTick);
-        uint160 upperSqrtRatio = TickMath.getSqrtRatioAtTick(_nextUpperTick);
-
-        compoundLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-          sqrtRatioX96,
-          lowerSqrtRatio,
-          upperSqrtRatio,
-          _amount0,
-          _amount1
-        );
-
-        (tkn0Amount,tkn1Amount) = LiquidityAmounts.getAmountsForLiquidity(sqrtRatioX96,lowerSqrtRatio,upperSqrtRatio,compoundLiquidity);
-    }
-
     /**
      * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
