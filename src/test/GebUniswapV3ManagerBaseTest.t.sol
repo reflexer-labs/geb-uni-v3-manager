@@ -40,6 +40,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
         // Deploy each token
         testRai = new TestRAI("RAI");
+        
         testWeth = new TestWETH("WETH");
         (token0, token1) = address(testRai) < address(testWeth) ? (TestToken(testRai), TestToken(testWeth)) : (TestToken(testWeth), TestToken(testRai));
 
@@ -151,13 +152,17 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
     function helper_addWhaleLiquidity() public {
         uint256 token0Am = 1000 ether;
         uint256 token1Am = 1000 ether;
-
-        int24 low = -887220;
-        int24 upp = 887220;
-
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
+        int24 low = -600000;
+        int24 upp = 600000;
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
-        pool.mint(address(this), low, upp, 1000000000, bytes(""));
+        pool.mint(address(this), low, upp, liq, bytes(""));
+
+        low = -120000;
+        upp = 120000;
+        liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, low, upp, token0Am, token1Am);
+        pool.mint(address(this), low, upp, liq, bytes(""));
+
     }
 
         
