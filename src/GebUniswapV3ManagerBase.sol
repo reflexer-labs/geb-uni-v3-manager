@@ -24,12 +24,10 @@ SOFTWARE.
 
 pragma solidity 0.6.7;
 
-// import { ERC20 } from "./erc20/ERC20.sol";
 import "./PoolViewer.sol";
 import "./PeripheryPayments.sol";
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
-// import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
 import { TickMath } from "./uni/libraries/TickMath.sol";
 
@@ -83,6 +81,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
     int24 public constant MAX_TICK = 887220;
     int24 public constant MIN_TICK = -887220;
+    // The minimum swap threshold, so it's worthiwhile the gas 
+    uint256 constant SWAP_THRESHOLD = 1 finney; //1e15 units.
 
     // --- Struct ---
     struct Position {
@@ -157,21 +157,21 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         authorizedAccounts[msg.sender] = 1;
 
         // Getting pool information
-        pool = IUniswapV3Pool(pool_);
+        pool                = IUniswapV3Pool(pool_);
 
-        token0 = pool.token0();
-        token1 = pool.token1();
-        fee = pool.fee();
-        tickSpacing = pool.tickSpacing();
+        token0              = pool.token0();
+        token1              = pool.token1();
+        fee                 = pool.fee();
+        tickSpacing         = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
         require(MIN_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-max-tick-for-spacing");
         require(MAX_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-min-tick-for-spacing");
 
-        delay = delay_;
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
-        oracle = oracle_;
-        poolViewer = poolViewer_;
+        delay       = delay_;
+        oracle      = oracle_;
+        poolViewer  = poolViewer_;
 
         emit AddAuthorization(msg.sender);
     }
@@ -250,7 +250,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
      * @return _nextUpper The upper bound of the range
      */
     function getNextTicks(uint256 _threshold) public returns (int24 _nextLower, int24 _nextUpper, int24 targetTick) {
-       targetTick  = getTargetTick();
+       targetTick                 = getTargetTick();
        (_nextLower,  _nextUpper) = getTicksWithThreshold(targetTick, _threshold);
     }
 
@@ -300,8 +300,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
      * @return amount1 The amount of token1
      */
     function _getTokenAmountsFromLiquidity(Position storage _position, uint128 _liquidity) internal returns (uint256 amount0, uint256 amount1) {
-        uint256 __supply = _totalSupply;
-        uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
+        uint256 __supply          = _totalSupply;
+        uint128 _liquidityBurned  = uint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
 
         (, bytes memory ret) =
           address(poolViewer).delegatecall(
@@ -324,8 +324,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
         { // Scope to avoid stack too deep
           uint128 compoundLiquidity = 0;
-          uint256 used0 = 0;
-          uint256 used1 = 0;
+          uint256 used0             = 0;
+          uint256 used1             = 0;
 
           if (_position.uniLiquidity > 0 && (_position.lowerTick != _nextLowerTick || _position.upperTick != _nextUpperTick)) {
             (compoundLiquidity,  used0,  used1) = getMaxLiquidity(_position,_nextLowerTick,_nextUpperTick);
@@ -396,7 +396,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
           _amount0,
           _amount1
         );
-
+        // Tokens amounts aren't precise from the calculation above, so we do the reverse operation to get the precise amount
         (tkn0Amount,tkn1Amount) = LiquidityAmounts.getAmountsForLiquidity(sqrtRatioX96,lowerSqrtRatio,upperSqrtRatio,compoundLiquidity);
     }
 
@@ -410,26 +410,29 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
      * @return tkn1Amount The amount of token1 that will be used
      */
     function getMaxLiquidity(Position storage _position, int24 _nextLowerTick, int24 _nextUpperTick) internal returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
-      // Burn the existing position and get the fees
-      (uint256 collected0, uint256 collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
+        // Burn the existing position and get the fees
+        (uint256 collected0, uint256 collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
 
-      uint256 partialAmount0 = collected0.add(_position.tkn0Reserve);
-      uint256 partialAmount1 = collected1.add(_position.tkn1Reserve);
+        uint256 partialAmount0 = collected0.add(_position.tkn0Reserve);
+        uint256 partialAmount1 = collected1.add(_position.tkn1Reserve);
+        (uint256 used0, uint256 used1) = (0,0);
+        (uint256 newAmount0, uint256 newAmount1) = (0,0);
+        // Calculate how much liquidity we can get from what's been collect + what we have in the reserves
+        (compoundLiquidity, used0, used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0,partialAmount1);
 
-      // Calculatehow much liquidity we can get from what's been collect + what we have in the reserves
-      (, uint256 used0, uint256 used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0,partialAmount1);
+        if(partialAmount0.sub(used0) >= SWAP_THRESHOLD && partialAmount1.sub(used1) >= SWAP_THRESHOLD) {
+          // Take the leftover amounts and do a swap to get a bit more liquidity
+          (newAmount0, newAmount1) = _swapOutstanding(_position, partialAmount0.sub(used0), partialAmount1.sub(used1));
+          
+          // With new amounts, calculate again how much liquidity we can get
+          (compoundLiquidity,  used0,  used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
+        }
 
-      // Take the leftover amounts and do a swap to get a bit more liquidity
-      (uint256 newAmount0, uint256 newAmount1) = _swapOutstanding(_position, partialAmount0.sub(used0), partialAmount1.sub(used1));
-      
-      // With new amounts, calculate again how much liquidity we can get
-      (compoundLiquidity,  used0,  used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
-
-      // Update our reserves
-      _position.tkn0Reserve = partialAmount0.add(newAmount0).sub(used0);
-      _position.tkn1Reserve = partialAmount1.add(newAmount1).sub(used1);
-      tkn0Amount = used0;
-      tkn1Amount = used1;
+        // Update our reserves
+        _position.tkn0Reserve = partialAmount0.add(newAmount0).sub(used0);
+        _position.tkn1Reserve = partialAmount1.add(newAmount1).sub(used1);
+        tkn0Amount = used0;
+        tkn1Amount = used1;
     }
 
     /**
@@ -441,6 +444,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
      * @return newAmount1 The new amount of token1 received
      */
     function _swapOutstanding(Position storage _position, uint256 swapAmount0,uint256 swapAmount1) internal returns(uint256 newAmount0,uint256 newAmount1) {
+      // The swap is not the optimal trade, but it's a simpler calculation that will be enough to keep more or less balanced
       if (swapAmount0 > 0 || swapAmount1 > 0) {
             bool zeroForOne = swapAmount0 > swapAmount1;
             (int256 amount0Delta, int256 amount1Delta) = pool.swap(
