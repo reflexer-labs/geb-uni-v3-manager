@@ -29,6 +29,17 @@ contract TestRAI is TestToken {
 
 contract TestWETH is TestToken {
     constructor(string memory _symbol) public TestToken(_symbol, 300000000 ether) {}
+
+    fallback() external payable {
+        deposit();
+    }
+    function deposit() public payable {
+        _mint(msg.sender, msg.value);
+    }
+    function withdraw(uint wad) public {   
+        _burn(msg.sender,wad);
+        msg.sender.transfer(wad);
+    }
 }
 
 abstract contract Hevm {
@@ -54,6 +65,9 @@ contract PoolUser {
         weth = _w;
     }
 
+    receive() external payable {
+    }
+
     function doTransfer(
         address token,
         address to,
@@ -62,8 +76,12 @@ contract PoolUser {
         ERC20(token).transfer(to, amount);
     }
 
-    function doDeposit(uint128 liquidityAmount) public {
-        manager.deposit(liquidityAmount, address(this));
+    function doDeposit(uint128 liquidityAmount) public payable{
+        manager.deposit{value:msg.value}(liquidityAmount, address(this), 0, 0);
+    }
+
+    function doDepositWithSlippage(uint128 liquidityAmount, uint256 minAm0, uint256 minAm1) public payable{
+        manager.deposit{value:msg.value}(liquidityAmount, address(this), minAm0, minAm1);
     }
 
     function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {

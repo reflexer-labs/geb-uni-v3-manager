@@ -15,7 +15,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     function setUp() override public {
         super.setUp();
 
-        manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv);
+        manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv, address(testWeth));
         manager_base = GebUniswapV3ManagerBase(manager);
 
         // Will initialize the pool with current price
@@ -39,7 +39,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     }
 
     function helper_addLiquidity(uint8 user) public {
-        // (bytes32 i_id, , , uint128 i_uniLiquidity,) = manager.position();
+        // (bytes32 i_id, , , uint128 i_uniLiquidity,,,) = manager.position();
         // (uint128 i_liquidity, , , , ) = pool.positions(i_id);
         PoolUser u = users[(user - 1) % 4];
         uint256 wethAmount = 3000 ether;
@@ -61,12 +61,12 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     }
 
     function test_sanity_positions() public {
-        (,,,,uint256 _threshold1) = manager.positions(0);
+        (,,,,uint256 _threshold1,,) = manager.positions(0);
         assertTrue(_threshold1 == threshold1);
         uint256 _ratio1 = manager.ratio1();
         assertTrue(_ratio1 == ratio1);
 
-        (,,,,uint256 _threshold2) = manager.positions(1);
+        (,,,,uint256 _threshold2,,) = manager.positions(1);
         assertTrue(_threshold2 == threshold2);
         uint256 _ratio2 = manager.ratio2();
         assertTrue(_ratio2 == ratio2);
@@ -193,40 +193,6 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         manager.uniswapV3MintCallback(0, 0, "");
     }
 
-    // Test not passing because swap is not accruing fees
-    // function test_collecting_fees() public {
-    //     (uint256 redemptionPrice, uint256 ethUsdPrice) = manager.getPrices();
-    //     emit log_named_uint("redemptionPrice", redemptionPrice); // redemptionPrice: 1000000000000000000000000000
-    //     emit log_named_uint("ethUsdPrice", ethUsdPrice); // ethUsdPrice: 300000000000000000000
-
-    //     (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
-    //     emit log_named_uint("price1", price0);
-    //     if (tick0 > 0) {
-    //         emit log_named_uint("pos tick0", helper_getAbsInt24(tick0));
-    //     } else {
-    //         emit log_named_uint("neg tick0", helper_getAbsInt24(tick0));
-    //     }
-
-    //     uint256 wethAmount = 1 ether;
-    //     uint256 raiAmount = 10 ether;
-
-    //     uint256 bal0w = testWeth.balanceOf(address(u2));
-    //     uint256 bal0r = testRai.balanceOf(address(u2));
-    //     u2.doDeposit(10000);
-
-    //     helper_do_swap();
-
-    //     u2.doWithdraw(10000);
-
-    //     uint256 bal1w = testWeth.balanceOf(address(u2));
-    //     uint256 bal1r = testRai.balanceOf(address(u2));
-    //     emit log_named_uint("bal0w", bal0w);
-    //     emit log_named_uint("bal0r", bal0r);
-    //     emit log_named_uint("bal1w", bal1w);
-    //     emit log_named_uint("bal1r", bal1r);
-
-    //     assertTrue(bal1w > bal0w);
-    // }
 
     function test_multiple_users_depositing() public {
         helper_addLiquidity(1); //Starting with a bit of liquidity
@@ -248,7 +214,32 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         u3.doWithdraw(uint128(manager.balanceOf(address(u3))));
     }
 
-    function test_liquidty_proportional_to_balance() public {
+    function test_mint_directly_with_eth() public {
+        u1.doApprove(address(testRai), address(manager), 100000000000000 ether);
+        u1.doDeposit{value: 10 ether}(1000);
+    }
+
+    function test_refund_eth() public {
+        uint256 initBal = address(u1).balance;
+        u1.doApprove(address(testRai), address(manager), 100000000000000 ether);
+        u1.doDeposit{value: 10 ether}(1000);
+        uint256 finBal = address(u1).balance;
+        assert(initBal - finBal > 10);
+    }
+
+    function testFail_slippage_check() public {
+        u1.doApprove(address(testRai), address(manager), 100000000000000 ether);
+        u1.doDepositWithSlippage{value: 10 ether}(1000, uint(0 -1),  uint(0 -1));
+    }
+
+    function testFail_low_liquidity() public {
+        u1.doApprove(address(testRai), address(manager), 100000000000000 ether);
+        u1.doDeposit{value: 10 ether}(1);
+    }
+
+
+
+    function test_liquidty_proportional_to_balanceB() public {
         testRai.approve(address(manager), 10);
         testWeth.approve(address(manager), 10);
         helper_addLiquidity(1);
@@ -263,20 +254,26 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         helper_changeRedemptionPrice(1200000000 ether);
         hevm.warp(2 days);
 
-        manager.rebalance();
 
-        // (bytes32 id, , , uint128 uniLiquidity1) = manager.position();
-        // (uint128 _liquidity, , , , ) = pool.positions(id);
-        // emit log_named_uint("_liquidity", _liquidity);
-        // emit log_named_uint("liq", uniLiquidity1);
+    
+        (uint256 bal00) = token0.balanceOf(address(manager));
+        (uint256 bal01) = token1.balanceOf(address(manager));
+        manager.rebalance();
+        (uint256 bal10) = token0.balanceOf(address(manager));
+        (uint256 bal11) = token1.balanceOf(address(manager));
+
+        emit log_named_uint("bal00", bal00); // 99999586913702
+        emit log_named_uint("bal10", bal10); // 99998743003300
+        emit log_named_uint("bal01", bal01); // 99199754914029
+        emit log_named_uint("bal11", bal11); // 097604052593458
 
         // user should be able to withdraw it's whole balance. Balance != Liquidity
         u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
 
         assertTrue(manager.totalSupply() == 0);
 
-        (bytes32 id0, , , uint128 uniLiquidity0,) = manager.positions(0);
-        (bytes32 id1, , , uint128 uniLiquidity1,) = manager.positions(1);
+        (bytes32 id0, , , uint128 uniLiquidity0,,,) = manager.positions(0);
+        (bytes32 id1, , , uint128 uniLiquidity1,,,) = manager.positions(1);
 
         assert(uniLiquidity0 == 0);
         assert(uniLiquidity1 == 0);
