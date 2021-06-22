@@ -81,7 +81,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
     int24 public constant MAX_TICK = 887220;
     int24 public constant MIN_TICK = -887220;
-    // The minimum swap threshold, so it's worthiwhile the gas 
+    // The minimum swap threshold, so it's worthiwhile the gas
     uint256 constant SWAP_THRESHOLD = 1 finney; //1e15 units.
 
     // --- Struct ---
@@ -222,7 +222,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
           // If it's an invalid address, this tx will revert
           OracleForUniswapLike(data).getResultsWithValidity();
           oracle = OracleForUniswapLike(data);
-        }
+        } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
 
         emit ModifyParameters(parameter, data);
     }
@@ -318,7 +318,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
      */
-     
+
     function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal returns(uint256 amount0,uint256 amount1){
         (int24 _nextLowerTick,int24 _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
 
@@ -423,7 +423,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         if(partialAmount0.sub(used0) >= SWAP_THRESHOLD && partialAmount1.sub(used1) >= SWAP_THRESHOLD) {
           // Take the leftover amounts and do a swap to get a bit more liquidity
           (newAmount0, newAmount1) = _swapOutstanding(_position, partialAmount0.sub(used0), partialAmount1.sub(used1));
-          
+
           // With new amounts, calculate again how much liquidity we can get
           (compoundLiquidity,  used0,  used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
         }
@@ -454,7 +454,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
               TickMath.getSqrtRatioAtTick(zeroForOne ? _position.lowerTick : _position.upperTick),
               abi.encode(address(this))
             );
-      
+
             newAmount0 = uint256(int256(swapAmount0) - amount0Delta);
             newAmount1 = uint256(int256(swapAmount1) - amount1Delta);
       }
