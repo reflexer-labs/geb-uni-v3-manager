@@ -310,6 +310,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
             abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), _position.lowerTick, _position.upperTick, _liquidityBurned)
           );
         (amount0, amount1) = abi.decode(ret, (uint256, uint256));
+        require(amount0 > 0 || amount1 > 0, "GebUniswapv3LiquidityManager/invalid-burnViewer-amounts");
     }
 
 
