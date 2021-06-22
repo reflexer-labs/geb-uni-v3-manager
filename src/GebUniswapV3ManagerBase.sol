@@ -198,6 +198,20 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         }
     }
 
+    // --- SafeCast ---
+    function toUint160(uint256 value) internal pure returns (uint160) {
+        require(value < 2**160, "GebUniswapv3LiquidityManager/toUint160_overflow");
+        return uint160(value);
+    }
+    function toUint128(uint256 value) internal pure returns (uint128) {
+        require(value < 2**128, "GebUniswapv3LiquidityManager/toUint128_overflow");
+        return uint128(value);
+    }
+    function toInt24(uint256 value) internal pure returns (int24) {
+        require(value < 2**23, "GebUniswapv3LiquidityManager/toInt24_overflow");
+        return int24(value);
+    }
+
     // --- Administration ---
     /**
      * @notice Modify the adjustable parameters
@@ -268,9 +282,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         // 2. Calculate the price ratio
         uint160 sqrtPriceX96;
         if (systemCoinIsT0) {
-          sqrtPriceX96 = uint160(sqrt((redemptionPrice.mul(PRICE_RATIO_SCALE).div(ethUsdPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
+          sqrtPriceX96 = toUint160(sqrt((redemptionPrice.mul(PRICE_RATIO_SCALE).div(ethUsdPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
         } else {
-          sqrtPriceX96 = uint160(sqrt((ethUsdPrice.mul(PRICE_RATIO_SCALE).div(redemptionPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
+          sqrtPriceX96 = toUint160(sqrt((ethUsdPrice.mul(PRICE_RATIO_SCALE).div(redemptionPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
         }
 
         // 3. Calculate the tick that the ratio is at
@@ -289,8 +303,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      */
     function getTicksWithThreshold(int24 targetTick, uint256 _threshold) public pure returns(int24 lowerTick, int24 upperTick){
         // 5. Find lower and upper bounds for the next position
-        lowerTick = targetTick - int24(_threshold) < MIN_TICK ? MIN_TICK : targetTick - int24(_threshold);
-        upperTick = targetTick + int24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + int24(_threshold);
+        lowerTick = targetTick - toInt24(_threshold) < MIN_TICK ? MIN_TICK : targetTick - toInt24(_threshold);
+        upperTick = targetTick + toInt24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + toInt24(_threshold);
     }
 
 
@@ -303,7 +317,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      */
     function _getTokenAmountsFromLiquidity(Position storage _position, uint128 _liquidity) internal returns (uint256 amount0, uint256 amount1) {
         uint256 __supply          = _totalSupply;
-        uint128 _liquidityBurned  = uint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
+        uint128 _liquidityBurned  = toUint128(uint256(_liquidity).mul(_position.uniLiquidity).div(__supply));
 
         (, bytes memory ret) =
           address(poolViewer).delegatecall(
@@ -356,7 +370,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         uint128 _liquidityBurned,
         address _recipient
     ) internal returns (uint256 amount0, uint256 amount1) {
-        (amount0, amount1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, uint128(_liquidityBurned), _recipient);
+        (amount0, amount1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _liquidityBurned, _recipient);
         emit Withdraw(msg.sender, _recipient, _liquidityBurned);
     }
 
