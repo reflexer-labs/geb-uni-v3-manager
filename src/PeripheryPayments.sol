@@ -63,7 +63,7 @@ abstract contract PherypheryPayments is PeripheryImmutableState {
     /// @dev The amountMinimum parameter prevents malicious contracts from stealing WETH9 from users.
     /// @param amountMinimum The minimum amount of WETH9 to unwrap
     /// @param recipient The address receiving ETH
-    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable {
+    function unwrapWETH9(uint256 amountMinimum, address recipient) internal {
         uint256 balanceWETH9 = IWETH9(WETH9).balanceOf(address(this));
         require(balanceWETH9 >= amountMinimum, 'Insufficient WETH9');
 
