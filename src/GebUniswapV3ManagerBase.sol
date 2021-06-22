@@ -293,7 +293,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
 
     /**
-     * @notice An internal fview function that allows simulating a withdraw and returning the amount of each token received
+     * @notice An internal non state changing function that allows simulating a withdraw and returning the amount of each token received
      * @param _position The position to perform the operation
      * @param _liquidity The amount of liquidity to be withdrawn
      * @return amount0 The amount of token0
