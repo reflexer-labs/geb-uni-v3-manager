@@ -58,7 +58,6 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapV3LiquidityManager/invalid-threshold");
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapV3LiquidityManager/threshold-incompatible-w/-tick-spacing");
-        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapV3LiquidityManager/invalid-delay");
 
         int24 target = getTargetTick();
         (int24 lower, int24 upper) = getTicksWithThreshold(target, threshold_);
