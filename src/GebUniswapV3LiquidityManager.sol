@@ -99,7 +99,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     // --- Core Logic ---
     /**
      * @notice Add liquidity to this pool manager
-     * @param newLiquidity The amount of liquidty that the user wishes to add
+     * @param newLiquidity The amount of liquidity that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
      * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks

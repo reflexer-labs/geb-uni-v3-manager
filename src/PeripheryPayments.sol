@@ -51,7 +51,7 @@ abstract contract PeripheryImmutableState {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-abstract contract PherypheryPayments is PeripheryImmutableState {
+abstract contract PeripheryPayments is PeripheryImmutableState {
 
     constructor(address _WETH9) public PeripheryImmutableState(_WETH9) {}
 

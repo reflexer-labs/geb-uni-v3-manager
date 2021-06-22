@@ -38,7 +38,7 @@ abstract contract OracleForUniswapLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
+abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -64,7 +64,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     IUniswapV3Pool public pool;
     // Address of oracle relayer to get prices from
     OracleForUniswapLike public oracle;
-    // Address of contract that allows simulating pool fuctions
+    // Address of contract that allows simulating pool functions
     PoolViewer public poolViewer;
 
     // --- Constants ---
@@ -81,8 +81,11 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
     int24 public constant MAX_TICK = 887220;
     int24 public constant MIN_TICK = -887220;
-    // The minimum swap threshold, so it's worthiwhile the gas
+    // The minimum swap threshold, so it's worthwhile the gas
     uint256 constant SWAP_THRESHOLD = 1 finney; //1e15 units.
+    // Constants for price ratio calculation
+    uint256 public constant PRICE_RATIO_SCALE = 1000000000;
+    uint256 public constant SHIFT_AMOUNT = 192;
 
     // --- Struct ---
     struct Position {
@@ -151,7 +154,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
       OracleForUniswapLike oracle_,
       PoolViewer poolViewer_,
       address weth9Address
-    ) public ERC20(name_, symbol_) PherypheryPayments(weth9Address) {
+    ) public ERC20(name_, symbol_) PeripheryPayments(weth9Address) {
         require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
 
         authorizedAccounts[msg.sender] = 1;
@@ -264,11 +267,10 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
 
         // 2. Calculate the price ratio
         uint160 sqrtPriceX96;
-        uint256 scale = 1000000000;
         if (systemCoinIsT0) {
-          sqrtPriceX96 = uint160(sqrt((redemptionPrice.mul(scale).div(ethUsdPrice) << 192) / scale));
+          sqrtPriceX96 = uint160(sqrt((redemptionPrice.mul(PRICE_RATIO_SCALE).div(ethUsdPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
         } else {
-          sqrtPriceX96 = uint160(sqrt((ethUsdPrice.mul(scale).div(redemptionPrice) << 192) / scale));
+          sqrtPriceX96 = uint160(sqrt((ethUsdPrice.mul(PRICE_RATIO_SCALE).div(redemptionPrice) << SHIFT_AMOUNT) / PRICE_RATIO_SCALE));
         }
 
         // 3. Calculate the tick that the ratio is at
@@ -511,7 +513,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PherypheryPayments {
         _position.uniLiquidity = _liquidity;
     }
     /**
-     * @notice Callback used to transfer tokens to the pool. Tokens need to be aproved before calling mint or deposit.
+     * @notice Callback used to transfer tokens to the pool. Tokens need to be approved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool
      * @param amount1Owed The amount of token1 necessary to send to pool
      * @param data Arbitrary data to use in the function

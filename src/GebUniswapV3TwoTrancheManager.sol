@@ -65,10 +65,10 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       PoolViewer poolViewer_,
       address wethAddress_
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
-        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold");
+        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-threshold");
         require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
-        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold2");
+        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-threshold2");
         require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
         require(ratio_1.add(ratio_2) == 100,"GebUniswapV3TwoTrancheManager/invalid-ratios");
@@ -146,7 +146,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
 
     /**
      * @notice Add liquidity to this Uniswap pool manager
-     * @param newLiquidity The amount of liquidty that the user wishes to add
+     * @param newLiquidity The amount of liquidity that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
      * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
