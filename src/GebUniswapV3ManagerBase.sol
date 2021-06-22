@@ -331,7 +331,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
           uint256 used1             = 0;
 
           if (_position.uniLiquidity > 0 && (_position.lowerTick != _nextLowerTick || _position.upperTick != _nextUpperTick)) {
-            (compoundLiquidity,  used0,  used1) = getMaxLiquidity(_position,_nextLowerTick,_nextUpperTick);
+            (compoundLiquidity,  used0,  used1) = maxLiquidity(_position,_nextLowerTick,_nextUpperTick);
             require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
 
             emit Rebalance(msg.sender, block.timestamp);
@@ -370,7 +370,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         (int24 _currentLowerTick, int24 _currentUpperTick) = (_position.lowerTick, _position.upperTick);
 
         if (_currentLowerTick != _nextLowerTick || _currentUpperTick != _nextUpperTick) {
-          (uint128 compoundLiquidity, uint256 used0, uint256 used1) = getMaxLiquidity(_position,_nextLowerTick,_nextUpperTick);
+          (uint128 compoundLiquidity, uint256 used0, uint256 used1) = maxLiquidity(_position,_nextLowerTick,_nextUpperTick);
           _mintOnUniswap(_position, _nextLowerTick, _nextUpperTick, compoundLiquidity, abi.encode(msg.sender, used0, used1));
         }
         emit Rebalance(msg.sender, block.timestamp);
@@ -412,7 +412,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      * @return tkn0Amount The amount of token0 that will be used
      * @return tkn1Amount The amount of token1 that will be used
      */
-    function getMaxLiquidity(Position storage _position, int24 _nextLowerTick, int24 _nextUpperTick) internal returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
+    function maxLiquidity(Position storage _position, int24 _nextLowerTick, int24 _nextUpperTick) internal returns(uint128 compoundLiquidity, uint256 tkn0Amount, uint256 tkn1Amount){
         // Burn the existing position and get the fees
         (uint256 collected0, uint256 collected1) = _burnOnUniswap(_position, _position.lowerTick, _position.upperTick, _position.uniLiquidity, address(this));
 
