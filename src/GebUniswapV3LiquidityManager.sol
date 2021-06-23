@@ -58,7 +58,6 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapV3LiquidityManager/invalid-threshold");
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapV3LiquidityManager/threshold-incompatible-w/-tick-spacing");
-        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapV3LiquidityManager/invalid-delay");
 
         int24 target = getTargetTick();
         (int24 lower, int24 upper) = getTicksWithThreshold(target, threshold_);
@@ -100,7 +99,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
     // --- Core Logic ---
     /**
      * @notice Add liquidity to this pool manager
-     * @param newLiquidity The amount of liquidty that the user wishes to add
+     * @param newLiquidity The amount of liquidity that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
      * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
@@ -113,7 +112,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         uint128 totalLiquidity = position.uniLiquidity;
         int24 target= getTargetTick();
 
-        (uint256 amt0, uint256 amt1) = _deposit(position, uint128(newLiquidity), target);
+        (uint256 amt0, uint256 amt1) = _deposit(position, toUint128(newLiquidity), target);
 
         require(amt0 >= minAm0 && amt1 >= minAm1,"GebUniswapV3LiquidityManager/slippage-check");
 
@@ -125,7 +124,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
             mintAmount = newLiquidity.mul(_totalSupply).div(totalLiquidity);
         }
 
-        _mint(recipient, uint256(mintAmount));
+        _mint(recipient, mintAmount);
 
         emit Deposit(msg.sender, recipient, newLiquidity);
     }
@@ -148,7 +147,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         uint256 _liquidityBurned = liquidityAmount.mul(position.uniLiquidity).div(__supply);
         require(_liquidityBurned < MAX_UINT128, "GebUniswapV3LiquidityManager/too-much-to-burn-at-once");
 
-        (amount0, amount1) = _withdraw(position, uint128(_liquidityBurned), recipient);
+        (amount0, amount1) = _withdraw(position, toUint128(_liquidityBurned), recipient);
         emit Withdraw(msg.sender, recipient, liquidityAmount);
     }
 

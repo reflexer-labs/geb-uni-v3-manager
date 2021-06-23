@@ -65,10 +65,10 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       PoolViewer poolViewer_,
       address wethAddress_
     ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
-        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold");
+        require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-threshold");
         require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
-        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-thresold2");
+        require(threshold_2 >= MIN_THRESHOLD && threshold_2 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-threshold2");
         require(threshold_2 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
         require(ratio_1.add(ratio_2) == 100,"GebUniswapV3TwoTrancheManager/invalid-ratios");
@@ -103,7 +103,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
 
     // --- Helper ---
     function getAmountFromRatio(uint128 _amount, uint128 _ratio) internal pure returns (uint128){
-      return _amount.mul(_ratio).div(100);
+      return toUint128(_amount.mul(_ratio).div(100));
     }
 
     // --- Getters ---
@@ -115,7 +115,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      */
     function getTokenAmountsFromLiquidity(uint128 _liquidity) public returns (uint256 amount0, uint256 amount1) {
         uint256 __supply = _totalSupply;
-        uint128 _liquidityBurned = uint128(uint256(_liquidity).mul(positions[0].uniLiquidity + positions[1].uniLiquidity).div(__supply));
+        uint128 _liquidityBurned = toUint128(uint256(_liquidity).mul(positions[0].uniLiquidity + positions[1].uniLiquidity).div(__supply));
         (uint256 am0_pos0, uint256 am1_pos0) = _getTokenAmountsFromLiquidity(positions[0], _liquidityBurned);
         (uint256 am0_pos1, uint256 am1_pos1) = _getTokenAmountsFromLiquidity(positions[1], _liquidityBurned);
         (amount0, amount1) = (am0_pos0.add(am0_pos1), am1_pos0.add(am1_pos1));
@@ -146,7 +146,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
 
     /**
      * @notice Add liquidity to this Uniswap pool manager
-     * @param newLiquidity The amount of liquidty that the user wishes to add
+     * @param newLiquidity The amount of liquidity that the user wishes to add
      * @param recipient The address that will receive ERC20 wrapper tokens for the provided liquidity
      * @param minAm0 The minimum amount of token 0 for the tx to be considered valid. Preventing sandwich attacks
      * @param minAm1 The minimum amount of token 1 for the tx to be considered valid. Preventing sandwich attacks
@@ -159,8 +159,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         { //Avoid stack too deep
           int24 target= getTargetTick();
 
-          uint128 liq1 = getAmountFromRatio(uint128(newLiquidity), ratio1);
-          uint128 liq2 = getAmountFromRatio(uint128(newLiquidity), ratio2);
+          uint128 liq1 = getAmountFromRatio(toUint128(newLiquidity), ratio1);
+          uint128 liq2 = getAmountFromRatio(toUint128(newLiquidity), ratio2);
 
           require(liq1 > 0 && liq2 > 0, "GebUniswapV3TwoTrancheManager/minting-zero-liquidity");
 
@@ -201,8 +201,8 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
         uint256 _liquidityBurned1 = liquidityAmount.mul(positions[1].uniLiquidity).div(__supply);
         require(_liquidityBurned0 < MAX_UINT128, "GebUniswapV3TwoTrancheManager/too-much-to-burn-at-once");
 
-        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], uint128(_liquidityBurned0), recipient);
-        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], uint128(_liquidityBurned1), recipient);
+        (uint256 am0_pos0, uint256 am1_pos0 ) = _withdraw(positions[0], toUint128(_liquidityBurned0), recipient);
+        (uint256 am0_pos1, uint256 am1_pos1 ) = _withdraw(positions[1], toUint128(_liquidityBurned1), recipient);
 
         (amount0, amount1) = (am0_pos0.add(am0_pos1), am1_pos0.add(am1_pos1));
         emit Withdraw(msg.sender, recipient, liquidityAmount);
