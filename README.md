@@ -23,7 +23,7 @@ The contract `GebUniswapV3TwoTrancheManager` is the contract that manages positi
 Imagine the following scenario with 2 tranches:
 
 -   Tranche 1: 10% of treasury, with a threshold of 5%
--   Tranche 2: 40% of treasury, with a threshold of 95%
+-   Tranche 2: 90% of treasury, with a threshold of 95%
 
 These numbers can be optimized for each pool, according to volatility or other factors.
 
