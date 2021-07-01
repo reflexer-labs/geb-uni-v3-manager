@@ -49,7 +49,7 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, token0Amount, token1Amount);
         u.doDeposit(liq);
     }
- 
+
     // --- Test Sanity Variables ---
     function test_sanity_uint_variables() public {
         uint256 _delay = manager.delay();
@@ -347,45 +347,6 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
     function testFail_calling_uni_callback() public {
         manager.uniswapV3MintCallback(0, 0, "");
     }
-
-    // function test_single_collecting_fees() public {
-    //     (uint160 price0, int24 tick0, , , , , ) = pool.slot0();
-    //     emit log_named_uint("price0", price0);
-    //     helper_logTick(tick0);
-
-    //     uint256 wethAmount = 1 ether;
-    //     uint256 raiAmount = 10 ether;
-
-    //     u2.doApprove(address(testRai), address(manager), raiAmount);
-    //     u2.doApprove(address(testWeth), address(manager), wethAmount);
-
-    //     (,,,,uint256 __threshold,,) = manager.position();
-    //     (int24 newLower, int24 newUpper, ) = manager.getNextTicks(__threshold);
-
-    //     uint128 liq = helper_getLiquidityAmountsForTicks(price0, newLower, newUpper, 1 ether, 10 ether);
-
-    //     uint256 bal0w = testWeth.balanceOf(address(u2));
-    //     uint256 bal0r = testRai.balanceOf(address(u2));
-    //     u2.doDeposit(liq);
-
-    //     helper_do_swap();
-
-    //     u2.doWithdraw(liq);
-
-    //     uint256 bal1w = testWeth.balanceOf(address(u2));
-    //     uint256 bal1r = testRai.balanceOf(address(u2));
-    //     emit log_named_uint("bal0w", bal0w);
-    //     emit log_named_uint("bal0r", bal0r);
-    //     emit log_named_uint("bal1w", bal1w);
-    //     emit log_named_uint("bal1r", bal1r);
-
-    //     (uint160 price2,int24 tick2 , , , , , ) = pool.slot0();
-
-    //     emit log_named_uint("price2", price2);
-    //     helper_logTick(tick2);
-
-    //     assertTrue(bal1r > bal0r);
-    // }
 
     function test_multiple_users_depositing() public {
         helper_addLiquidity(1); // Starting with a bit of liquidity

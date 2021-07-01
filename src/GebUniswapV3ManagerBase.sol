@@ -24,8 +24,11 @@ SOFTWARE.
 
 pragma solidity 0.6.7;
 
+import "./erc20/IERC20.sol";
 import "./PoolViewer.sol";
 import "./PeripheryPayments.sol";
+import "./utils/ReentrancyGuard.sol";
+
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "./uni/interfaces/callback/IUniswapV3MintCallback.sol";
 import { LiquidityAmounts } from "./uni/libraries/LiquidityAmounts.sol";
@@ -38,7 +41,33 @@ abstract contract OracleForUniswapLike {
 /**
  * @notice This contract is based on https://github.com/dmihal/uniswap-liquidity-dao/blob/master/contracts/MetaPool.sol
  */
-abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
+abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPayments {
+    // --- Auth ---
+    mapping (address => uint256) public authorizedAccounts;
+    /**
+     * @notice Add auth to an account
+     * @param account Account to add auth to
+     */
+    function addAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 1;
+        emit AddAuthorization(account);
+    }
+    /**
+     * @notice Remove auth from an account
+     * @param account Account to remove auth from
+     */
+    function removeAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 0;
+        emit RemoveAuthorization(account);
+    }
+    /**
+    * @notice Checks whether msg.sender can call an authed function
+    **/
+    modifier isAuthorized {
+        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3ManagerBase/account-not-authorized");
+        _;
+    }
+
     // --- Pool Variables ---
     // The address of pool's token0
     address public token0;
@@ -58,16 +87,25 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
     uint256 public delay;
     // The timestamp of the last rebalance
     uint256 public lastRebalance;
+    // The management fee retained from pool fees
+    uint256 public managementFee;
+
+    // Unclaimed token0 fees
+    uint256 public unclaimedToken0;
+    // Unclaimed token1 fees
+    uint256 public unclaimedToken1;
 
     // --- External Contracts ---
     // Address of the Uniswap v3 pool
-    IUniswapV3Pool public pool;
+    IUniswapV3Pool       public pool;
     // Address of oracle relayer to get prices from
     OracleForUniswapLike public oracle;
     // Address of contract that allows simulating pool functions
-    PoolViewer public poolViewer;
+    PoolViewer           public poolViewer;
 
     // --- Constants ---
+    // One hundred
+    uint256 constant HUNDRED = 100;
     // Used to get the max amount of tokens per liquidity burned
     uint128 constant MAX_UINT128 = uint128(0 - 1);
     // 100% - Not really achievable, because it'll reach max and min ticks
@@ -79,10 +117,10 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
     // 1 hour is the absolute minimum delay for a rebalance. Could be less through deposits
     uint256 constant MIN_DELAY = 60 minutes;
     // Absolutes ticks, (MAX_TICK % tickSpacing == 0) and (MIN_TICK % tickSpacing == 0)
-    int24 public constant MAX_TICK = 887220;
-    int24 public constant MIN_TICK = -887220;
+    int24   public constant MAX_TICK = 887220;
+    int24   public constant MIN_TICK = -887220;
     // The minimum swap threshold, so it's worthwhile the gas
-    uint256 constant SWAP_THRESHOLD = 1 finney; //1e15 units.
+    uint256 constant SWAP_THRESHOLD = 1 finney; // 1e15 units.
     // Constants for price ratio calculation
     uint256 public constant PRICE_RATIO_SCALE = 1000000000;
     uint256 public constant SHIFT_AMOUNT = 192;
@@ -99,42 +137,13 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
     }
 
     // --- Events ---
-    event ModifyParameters(bytes32 parameter, uint256 val);
-    event ModifyParameters(bytes32 parameter, address val);
     event AddAuthorization(address account);
     event RemoveAuthorization(address account);
+    event ModifyParameters(bytes32 parameter, uint256 val);
+    event ModifyParameters(bytes32 parameter, address val);
     event Deposit(address sender, address recipient, uint256 liquidityAdded);
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
-
-    // --- Auth ---
-    mapping(address => uint256) public authorizedAccounts;
-
-    /**
-     * @notice Add auth to an account
-     * @param account Account to add auth to
-     */
-    function addAuthorization(address account) external isAuthorized {
-        authorizedAccounts[account] = 1;
-        emit AddAuthorization(account);
-    }
-
-    /**
-     * @notice Remove auth from an account
-     * @param account Account to remove auth from
-     */
-    function removeAuthorization(address account) external isAuthorized {
-        authorizedAccounts[account] = 0;
-        emit RemoveAuthorization(account);
-    }
-
-    /**
-     * @notice Checks whether msg.sender can call an authed function
-     **/
-    modifier isAuthorized() {
-        require(authorizedAccounts[msg.sender] == 1, "GebUniswapV3LiquidityManager/account-not-authorized");
-        _;
-    }
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -142,6 +151,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      * @param symbol_ The symbol of the ERC20 this contract will distribute
      * @param systemCoinAddress_ The address of the system coin
      * @param delay_ The minimum required time before rebalance() can be called
+     * @param managementFee_ The initial management fee
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both prices
      */
@@ -149,13 +159,15 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
       string memory name_,
       string memory symbol_,
       address systemCoinAddress_,
-      uint256 delay_,
       address pool_,
-      OracleForUniswapLike oracle_,
-      PoolViewer poolViewer_,
       address weth9Address
+      uint256 delay_,
+      uint256 managementFee_,
+      OracleForUniswapLike oracle_,
+      PoolViewer poolViewer_
     ) public ERC20(name_, symbol_) PeripheryPayments(weth9Address) {
-        require(delay_ >= MIN_DELAY && delay_ <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
+        require(both(delay_ >= MIN_DELAY, delay_ <= MAX_DELAY), "GebUniswapV3ManagerBase/invalid-delay");
+        require(managementFee_ < HUNDRED, "GebUniswapV3ManagerBase/invalid-management-fee");
 
         authorizedAccounts[msg.sender] = 1;
 
@@ -168,13 +180,14 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         tickSpacing         = pool.tickSpacing();
         maxLiquidityPerTick = pool.maxLiquidityPerTick();
 
-        require(MIN_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-max-tick-for-spacing");
-        require(MAX_TICK % tickSpacing == 0, "GebUniswapv3LiquidityManager/invalid-min-tick-for-spacing");
+        require(MIN_TICK % tickSpacing == 0, "GebUniswapV3ManagerBase/invalid-max-tick-for-spacing");
+        require(MAX_TICK % tickSpacing == 0, "GebUniswapV3ManagerBase/invalid-min-tick-for-spacing");
 
         systemCoinIsT0 = token0 == systemCoinAddress_ ? true : false;
-        delay       = delay_;
-        oracle      = oracle_;
-        poolViewer  = poolViewer_;
+        delay          = delay_;
+        oracle         = oracle_;
+        poolViewer     = poolViewer_;
+        managementFee  = managementFee_;
 
         emit AddAuthorization(msg.sender);
     }
@@ -198,17 +211,25 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         }
     }
 
+    // --- Boolean Logic ---
+    function both(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := and(x, y)}
+    }
+    function either(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := or(x, y)}
+    }
+
     // --- SafeCast ---
     function toUint160(uint256 value) internal pure returns (uint160) {
-        require(value < 2**160, "GebUniswapv3LiquidityManager/toUint160_overflow");
+        require(value < 2**160, "GebUniswapV3ManagerBase/toUint160_overflow");
         return uint160(value);
     }
     function toUint128(uint256 value) internal pure returns (uint128) {
-        require(value < 2**128, "GebUniswapv3LiquidityManager/toUint128_overflow");
+        require(value < 2**128, "GebUniswapV3ManagerBase/toUint128_overflow");
         return uint128(value);
     }
     function toInt24(uint256 value) internal pure returns (int24) {
-        require(value < 2**23, "GebUniswapv3LiquidityManager/toInt24_overflow");
+        require(value < 2**23, "GebUniswapV3ManagerBase/toInt24_overflow");
         return int24(value);
     }
 
@@ -220,9 +241,14 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      */
     function modifyParameters(bytes32 parameter, uint256 data) external isAuthorized {
         if (parameter == "delay") {
-          require(data >= MIN_DELAY && data <= MAX_DELAY, "GebUniswapv3LiquidityManager/invalid-delay");
+          require(both(data >= MIN_DELAY, data <= MAX_DELAY), "GebUniswapV3ManagerBase/invalid-delay");
           delay = data;
-        } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
+        }
+        else if (parameter == "managementFee") {
+          require(data < HUNDRED, "GebUniswapV3ManagerBase/invalid-management-fee");
+          managementFee = data;
+        }
+        else revert("GebUniswapV3ManagerBase/modify-unrecognized-param");
 
         emit ModifyParameters(parameter, data);
     }
@@ -233,15 +259,32 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      * @param data The value to set for the parameter
      */
     function modifyParameters(bytes32 parameter, address data) external isAuthorized {
-        require(data != address(0), "GebUniswapv3LiquidityManager/null-data");
+        require(data != address(0), "GebUniswapV3ManagerBase/null-data");
 
         if (parameter == "oracle") {
           // If it's an invalid address, this tx will revert
           OracleForUniswapLike(data).getResultsWithValidity();
           oracle = OracleForUniswapLike(data);
-        } else revert("GebUniswapv3LiquidityManager/modify-unrecognized-param");
+        } else revert("GebUniswapV3ManagerBase/modify-unrecognized-param");
 
         emit ModifyParameters(parameter, data);
+    }
+
+    /**
+     * @notice Claim management fees and send them to a custom address
+     * @param receiver The fee receiver
+     */
+    function claimManagementFees(address receiver) external nonReentrant isAuthorized {
+        if (unclaimedToken0 > 0) {
+          IERC20(token0).transfer(receiver, unclaimedToken0);
+          unclaimedToken0 = 0;
+        }
+        if (unclaimedToken1 > 0) {
+          IERC20(token1).transfer(receiver, unclaimedToken1);
+          unclaimedToken1 = 0;
+        }
+
+        emit ClaimManagementFees(receiver);
     }
 
     // --- Virtual functions  ---
@@ -258,7 +301,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
     function getPrices() public returns (uint256 redemptionPrice, uint256 tokenPrice) {
         bool valid;
         (redemptionPrice, tokenPrice, valid) = oracle.getResultsWithValidity();
-        require(valid, "GebUniswapv3LiquidityManager/invalid-price");
+        require(valid, "GebUniswapV3ManagerBase/invalid-price");
     }
 
     /**
@@ -307,7 +350,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         upperTick = targetTick + toInt24(_threshold) > MAX_TICK ? MAX_TICK : targetTick + toInt24(_threshold);
     }
 
-
     /**
      * @notice An internal non state changing function that allows simulating a withdraw and returning the amount of each token received
      * @param _position The position to perform the operation
@@ -324,9 +366,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
             abi.encodeWithSignature("burnViewer(address,int24,int24,uint128)", address(pool), _position.lowerTick, _position.upperTick, _liquidityBurned)
           );
         (amount0, amount1) = abi.decode(ret, (uint256, uint256));
-        require(amount0 > 0 || amount1 > 0, "GebUniswapv3LiquidityManager/invalid-burnViewer-amounts");
+        require(amount0 > 0 || amount1 > 0, "GebUniswapV3ManagerBase/invalid-burnViewer-amounts");
     }
-
 
     // --- Core user actions ---
     /**
@@ -335,7 +376,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      * @param _newLiquidity The amount of liquidity to add
      * @param _targetTick The price to center the position around
      */
-
     function _deposit(Position storage _position, uint128 _newLiquidity, int24 _targetTick ) internal returns(uint256 amount0,uint256 amount1){
         (int24 _nextLowerTick,int24 _nextUpperTick) = getTicksWithThreshold(_targetTick,_position.threshold);
 
@@ -344,9 +384,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
           uint256 used0             = 0;
           uint256 used1             = 0;
 
-          if (_position.uniLiquidity > 0 && (_position.lowerTick != _nextLowerTick || _position.upperTick != _nextUpperTick)) {
+          if (both(_position.uniLiquidity > 0, either(_position.lowerTick != _nextLowerTick, _position.upperTick != _nextUpperTick))) {
             (compoundLiquidity,  used0,  used1) = maxLiquidity(_position,_nextLowerTick,_nextUpperTick);
-            require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapv3LiquidityManager/liquidity-overflow");
+            require(_newLiquidity + compoundLiquidity >= _newLiquidity, "GebUniswapV3ManagerBase/liquidity-overflow");
 
             emit Rebalance(msg.sender, block.timestamp);
           }
@@ -413,7 +453,8 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
           _amount0,
           _amount1
         );
-        // Tokens amounts aren't precise from the calculation above, so we do the reverse operation to get the precise amount
+
+        // Token amounts aren't precise from the calculation above, so we do the reverse operation to get the precise amount
         (tkn0Amount,tkn1Amount) = LiquidityAmounts.getAmountsForLiquidity(sqrtRatioX96,lowerSqrtRatio,upperSqrtRatio,compoundLiquidity);
     }
 
@@ -434,15 +475,16 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         uint256 partialAmount1 = collected1.add(_position.tkn1Reserve);
         (uint256 used0, uint256 used1) = (0,0);
         (uint256 newAmount0, uint256 newAmount1) = (0,0);
+
         // Calculate how much liquidity we can get from what's been collect + what we have in the reserves
         (compoundLiquidity, used0, used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0,partialAmount1);
 
-        if(partialAmount0.sub(used0) >= SWAP_THRESHOLD && partialAmount1.sub(used1) >= SWAP_THRESHOLD) {
+        if(both(partialAmount0.sub(used0) >= SWAP_THRESHOLD, partialAmount1.sub(used1) >= SWAP_THRESHOLD)) {
           // Take the leftover amounts and do a swap to get a bit more liquidity
           (newAmount0, newAmount1) = _swapOutstanding(_position, partialAmount0.sub(used0), partialAmount1.sub(used1));
 
           // With new amounts, calculate again how much liquidity we can get
-          (compoundLiquidity,  used0,  used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
+          (compoundLiquidity, used0, used1) = _getCompoundLiquidity(_nextLowerTick,_nextUpperTick,partialAmount0.add(newAmount0).sub(used0),partialAmount1.add(newAmount1).sub(used1));
         }
 
         // Update our reserves
@@ -460,9 +502,9 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
      * @return newAmount0 The new amount of token0 received
      * @return newAmount1 The new amount of token1 received
      */
-    function _swapOutstanding(Position storage _position, uint256 swapAmount0,uint256 swapAmount1) internal returns(uint256 newAmount0,uint256 newAmount1) {
-      // The swap is not the optimal trade, but it's a simpler calculation that will be enough to keep more or less balanced
-      if (swapAmount0 > 0 || swapAmount1 > 0) {
+    function _swapOutstanding(Position storage _position, uint256 swapAmount0, uint256 swapAmount1) internal returns (uint256 newAmount0,uint256 newAmount1) {
+        // The swap is not the optimal trade, but it's a simpler calculation that will be enough to keep everything more or less balanced
+        if (swapAmount0 > 0 || swapAmount1 > 0) {
             bool zeroForOne = swapAmount0 > swapAmount1;
             (int256 amount0Delta, int256 amount1Delta) = pool.swap(
               address(this),
@@ -474,7 +516,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
 
             newAmount0 = uint256(int256(swapAmount0) - amount0Delta);
             newAmount1 = uint256(int256(swapAmount1) - amount1Delta);
-      }
+        }
     }
 
     // --- Uniswap Related Functions ---
@@ -520,6 +562,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, PeripheryPayments {
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
+
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
 
