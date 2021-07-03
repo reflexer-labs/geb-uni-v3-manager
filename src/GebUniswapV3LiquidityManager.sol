@@ -41,6 +41,7 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
      * @param systemCoinAddress_ The address of the system coin
      * @param threshold_ The liquidity threshold around the redemption price
      * @param delay_ The minimum required time before rebalance() can be called
+     * @param managementFee_ The initial management fee
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both token prices
      * @param wethAddress_ Address of the WETH9 contract
@@ -51,11 +52,12 @@ contract GebUniswapV3LiquidityManager is GebUniswapV3ManagerBase {
         address systemCoinAddress_,
         uint256 threshold_,
         uint256 delay_,
+        uint256 managementFee_,
         address pool_,
         OracleForUniswapLike oracle_,
         PoolViewer poolViewer_,
         address wethAddress_
-    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
+    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,pool_,wethAddress_,delay_,managementFee_,oracle_,poolViewer_) {
         require(threshold_ >= MIN_THRESHOLD && threshold_ <= MAX_THRESHOLD, "GebUniswapV3LiquidityManager/invalid-threshold");
         require(threshold_ % uint256(tickSpacing) == 0, "GebUniswapV3LiquidityManager/threshold-incompatible-w/-tick-spacing");
 

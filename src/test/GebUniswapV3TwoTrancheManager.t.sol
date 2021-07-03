@@ -15,7 +15,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
     function setUp() override public {
         super.setUp();
 
-        manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv, address(testWeth));
+        manager = new GebUniswapV3TwoTrancheManager("Geb-Uniswap-Manager", "GUM", address(testRai), uint128(delay), 0, threshold1,threshold2, ratio1,ratio2, address(pool), oracle, pv, address(testWeth));
         manager_base = GebUniswapV3ManagerBase(manager);
 
         // Will initialize the pool with current price
@@ -255,7 +255,7 @@ contract GebUniswapv3TwoTrancheManagerTest is GebUniswapV3ManagerBaseTest {
         hevm.warp(2 days);
 
 
-    
+
         (uint256 bal00) = token0.balanceOf(address(manager));
         (uint256 bal01) = token1.balanceOf(address(manager));
         manager.rebalance();

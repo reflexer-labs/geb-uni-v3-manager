@@ -25,8 +25,8 @@ SOFTWARE.
 pragma solidity 0.6.7;
 
 import "./erc20/IERC20.sol";
-import "./PoolViewer.sol";
-import "./PeripheryPayments.sol";
+import "./utils/PoolViewer.sol";
+import "./utils/PeripheryPayments.sol";
 import "./utils/ReentrancyGuard.sol";
 
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
@@ -144,6 +144,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
     event Deposit(address sender, address recipient, uint256 liquidityAdded);
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
+    event ClaimManagementFees(address receiver);
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -160,7 +161,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
       string memory symbol_,
       address systemCoinAddress_,
       address pool_,
-      address weth9Address
+      address weth9Address,
       uint256 delay_,
       uint256 managementFee_,
       OracleForUniswapLike oracle_,
@@ -565,6 +566,20 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
 
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
+
+        // fees
+        uint fee0 = collected0.mul(managementFee).div(HUNDRED);
+        uint fee1 = collected1.mul(managementFee).div(HUNDRED);
+
+        unclaimedToken0 = unclaimedToken0.add(fee0);
+        unclaimedToken1 = unclaimedToken1.add(fee1);
+
+        collected0 = collected0.sub(fee0);
+        collected1 = collected1.sub(fee1);
+
+
+
+
 
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(_position.id);

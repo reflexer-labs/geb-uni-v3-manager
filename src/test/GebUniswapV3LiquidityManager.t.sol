@@ -12,7 +12,7 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
     // --- Test Setup ---
     function setUp() override public {
         super.setUp();
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracle, pv, address(0));
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, 0,address(pool), oracle, pv, address(0));
         manager_base = GebUniswapV3ManagerBase(manager);
 
         // Will initialize the pool with the current price
