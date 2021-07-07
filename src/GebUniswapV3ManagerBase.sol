@@ -545,7 +545,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
         _position.id = id;
         _position.uniLiquidity = _liquidity;
     }
-
     /**
      * @notice Helper function to burn a position
      * @param _lowerTick The lower bound of the range to deposit the liquidity to
@@ -578,7 +577,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
         _position.uniLiquidity = _liquidity;
     }
     /**
-     * @notice Helper function to burn a position
+     * @notice Helper function to collect fees
      * @param _lowerTick The lower bound of the range to deposit the liquidity to
      * @param _upperTick The upper bound of the range to deposit the liquidity to
      * @return collected0 The amount of token0 fees to be reinvested when balancing
@@ -589,7 +588,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
         int24 _lowerTick,
         int24 _upperTick
     ) internal returns (uint256 collected0, uint256 collected1) {
-
+        pool.burn(_lowerTick, _upperTick, 0);
         // collecting fees
         (collected0, collected1) = pool.collect(address(this), _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
 
