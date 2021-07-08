@@ -25,8 +25,8 @@ SOFTWARE.
 pragma solidity 0.6.7;
 
 import "./erc20/IERC20.sol";
-import "./PoolViewer.sol";
-import "./PeripheryPayments.sol";
+import "./utils/PoolViewer.sol";
+import "./utils/PeripheryPayments.sol";
 import "./utils/ReentrancyGuard.sol";
 
 import { IUniswapV3Pool } from "./uni/interfaces/IUniswapV3Pool.sol";
@@ -144,6 +144,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
     event Deposit(address sender, address recipient, uint256 liquidityAdded);
     event Withdraw(address sender, address recipient, uint256 liquidityAdded);
     event Rebalance(address sender, uint256 timestamp);
+    event ClaimManagementFees(address receiver);
 
     /**
      * @notice Constructor that sets initial parameters for this contract
@@ -160,7 +161,7 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
       string memory symbol_,
       address systemCoinAddress_,
       address pool_,
-      address weth9Address
+      address weth9Address,
       uint256 delay_,
       uint256 managementFee_,
       OracleForUniswapLike oracle_,
@@ -544,7 +545,6 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
         _position.id = id;
         _position.uniLiquidity = _liquidity;
     }
-
     /**
      * @notice Helper function to burn a position
      * @param _lowerTick The lower bound of the range to deposit the liquidity to
@@ -561,15 +561,47 @@ abstract contract GebUniswapV3ManagerBase is ERC20, ReentrancyGuard, PeripheryPa
         uint128 _burnedLiquidity,
         address _recipient
     ) internal returns (uint256 collected0, uint256 collected1) {
+
+        (uint256 fee0, uint256 fee1) = _collectFees(_position, _lowerTick, _upperTick);
+
         pool.burn(_lowerTick, _upperTick, _burnedLiquidity);
 
         // Collect all owed
         (collected0, collected1) = pool.collect(_recipient, _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
 
+        collected0 = collected0.add(fee0);
+        collected1 = collected1.add(fee1);
+
         // Update position. All other factors are still the same
         (uint128 _liquidity, , , , ) = pool.positions(_position.id);
         _position.uniLiquidity = _liquidity;
     }
+    /**
+     * @notice Helper function to collect fees
+     * @param _lowerTick The lower bound of the range to deposit the liquidity to
+     * @param _upperTick The upper bound of the range to deposit the liquidity to
+     * @return collected0 The amount of token0 fees to be reinvested when balancing
+     * @return collected1 The amount of token1 fees to be reinvested when balancing
+     */
+    function _collectFees(
+        Position storage _position,
+        int24 _lowerTick,
+        int24 _upperTick
+    ) internal returns (uint256 collected0, uint256 collected1) {
+        pool.burn(_lowerTick, _upperTick, 0);
+        // collecting fees
+        (collected0, collected1) = pool.collect(address(this), _lowerTick, _upperTick, MAX_UINT128, MAX_UINT128);
+
+        uint managementFee0 = collected0.mul(managementFee).div(HUNDRED);
+        uint managementFee1 = collected1.mul(managementFee).div(HUNDRED);
+
+        unclaimedToken0 = unclaimedToken0.add(managementFee0);
+        unclaimedToken1 = unclaimedToken1.add(managementFee1);
+
+        collected0 = collected0.sub(managementFee0);
+        collected1 = collected1.sub(managementFee1);
+    }
+
     /**
      * @notice Callback used to transfer tokens to the pool. Tokens need to be approved before calling mint or deposit.
      * @param amount0Owed The amount of token0 necessary to send to pool

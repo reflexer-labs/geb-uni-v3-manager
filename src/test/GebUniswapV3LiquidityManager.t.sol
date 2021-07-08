@@ -12,7 +12,7 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
     // --- Test Setup ---
     function setUp() override public {
         super.setUp();
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, address(pool), oracle, pv, address(0));
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(testRai), threshold, delay, 20,address(pool), oracle, pv, address(0));
         manager_base = GebUniswapV3ManagerBase(manager);
 
         // Will initialize the pool with the current price
@@ -48,6 +48,15 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         (uint160 sqrtRatioX96, , , , , , ) = pool.slot0();
         uint128 liq = helper_getLiquidityAmountsForTicks(sqrtRatioX96, newLower, newUpper, token0Amount, token1Amount);
         u.doDeposit(liq);
+    }
+
+    function helper_swap(uint8 user, bool zeroForOne, int256 size) public {
+        (uint160 currentPrice, , , , , , ) = pool.slot0();
+        uint160 sqrtLimitPrice = currentPrice - uint160(size);
+
+        PoolUser u = users[(user - 1)];
+
+        u.doSwap(zeroForOne, size, sqrtLimitPrice);
     }
 
     // --- Test Sanity Variables ---
@@ -366,6 +375,28 @@ contract GebUniswapV3LiquidityManagerTest is GebUniswapV3ManagerBaseTest {
         helper_addLiquidity(1); //Starting with a bit of liquidity
         u1.doTransfer(address(manager), address(u3), manager.balanceOf(address(u1)));
         u3.doWithdraw(uint128(manager.balanceOf(address(u3))));
+    }
+
+    function test_collect_fees() public {
+        testRai.approve(address(manager), 10);
+        testWeth.approve(address(manager), 10);
+
+        helper_addLiquidity(1);
+        helper_addLiquidity(2);
+        helper_swap(1, true, 500 ether);
+
+        helper_changeRedemptionPrice(1200000000 ether);
+        hevm.warp(2 days);
+        manager.rebalance();
+
+        uint feesToClaim = manager.unclaimedToken0();
+        assertTrue(feesToClaim > 0);
+
+        helper_addLiquidity(2);
+        u1.doWithdraw(uint128(manager.balanceOf(address(u1))));
+
+        manager.claimManagementFees(address(0xfab));
+        assertEq(testRai.balanceOf(address(0xfab)), feesToClaim);
     }
 
     function test_liquidty_proportional_to_balance() public {

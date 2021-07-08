@@ -40,7 +40,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
         // Deploy each token
         testRai = new TestRAI("RAI");
-        
+
         testWeth = new TestWETH("WETH");
         (token0, token1) = address(testRai) < address(testWeth) ? (TestToken(testRai), TestToken(testWeth)) : (TestToken(testWeth), TestToken(testRai));
 
@@ -165,7 +165,7 @@ contract GebUniswapV3ManagerBaseTest is DSTest {
 
     }
 
-        
+
 
      // --- Uniswap Callbacks ---
     function uniswapV3MintCallback(

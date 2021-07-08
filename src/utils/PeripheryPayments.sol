@@ -24,8 +24,8 @@ SOFTWARE.
 
 pragma solidity 0.6.7;
 
-import { ERC20 } from "./erc20/ERC20.sol";
-import { TransferHelper } from "./uni/libraries/TransferHelper.sol";
+import { ERC20 } from "../erc20/ERC20.sol";
+import { TransferHelper } from "../uni/libraries/TransferHelper.sol";
 
 /// @title Interface for WETH9
 abstract contract IWETH9 is ERC20 {

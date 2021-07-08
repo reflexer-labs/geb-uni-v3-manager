@@ -47,6 +47,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
      * @param ratio_1 The ratio around that the first position invest with
      * @param ratio_2 The ratio around that the second position invest with
      * @param delay_ The minimum required time before rebalance() can be called
+     * @param managementFee_ The initial management fee
      * @param pool_ Address of the already deployed Uniswap v3 pool that this contract will manage
      * @param oracle_ Address of the already deployed oracle that provides both prices
      * @param wethAddress_ Address of the WETH9 contract
@@ -56,6 +57,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       string memory symbol_,
       address systemCoinAddress_,
       uint256 delay_,
+      uint256 managementFee_,
       uint256 threshold_1,
       uint256 threshold_2,
       uint128 ratio_1,
@@ -64,7 +66,7 @@ contract GebUniswapV3TwoTrancheManager is GebUniswapV3ManagerBase {
       OracleForUniswapLike oracle_,
       PoolViewer poolViewer_,
       address wethAddress_
-    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,delay_,pool_,oracle_,poolViewer_,wethAddress_) {
+    ) public GebUniswapV3ManagerBase(name_, symbol_,systemCoinAddress_,pool_,wethAddress_,delay_,managementFee_,oracle_,poolViewer_) {
         require(threshold_1 >= MIN_THRESHOLD && threshold_1 <= MAX_THRESHOLD, "GebUniswapV3TwoTrancheManager/invalid-threshold");
         require(threshold_1 % uint256(tickSpacing) == 0, "GebUniswapV3TwoTrancheManager/threshold-incompatible-w/-tickSpacing");
 
