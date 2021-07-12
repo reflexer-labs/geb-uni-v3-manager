@@ -110,3 +110,19 @@ echidna_always_has_a_position: passed! 🎉
 
 Seed: -4476645346192855678
 ```
+
+### Running with Two Tranche Manager
+
+#### Results:
+
+```
+Analyzing contract: /Users/fabio/Documents/reflexer/geb-uni-v3-manager/src/test/fuzz/GebUniswapV3TwoTrancheManagerFuzz.sol:Fuzzer
+echidna_manager_does_not_have_position_if_supply_is_zero: passed! 🎉
+echidna_select_ticks_correctly: passed! 🎉
+echidna_position_integrity: passed! 🎉
+echidna_supply_integrity: passed! 🎉
+echidna_id_integrity: passed! 🎉
+echidna_always_has_a_position: passed! 🎉
+
+Seed: -1278977579305309770
+```

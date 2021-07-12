@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 import "../../TestHelpers.sol";
 import "../../../uni/UniswapV3Pool.sol";
 import "../../../GebUniswapV3LiquidityManager.sol";
+import "../../../GebUniswapV3TwoTrancheManager.sol";
 import "../../../uni/UniswapV3Factory.sol";
 
 contract SetupTokens {
@@ -188,6 +189,141 @@ contract FuzzUser {
 
     constructor(
         GebUniswapV3LiquidityManager man,
+        TestToken _token0,
+        TestToken _token1
+    ) public {
+        token0 = _token0;
+        token1 = _token1;
+        manager = man;
+    }
+
+    struct SwapperStats {
+        uint128 liq;
+        uint256 feeGrowthGlobal0X128;
+        uint256 feeGrowthGlobal1X128;
+        uint256 bal0;
+        uint256 bal1;
+        int24 tick;
+    }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        if (amount0Delta > 0) token0.transfer(address(pool), uint256(amount0Delta));
+        if (amount1Delta > 0) token1.transfer(address(pool), uint256(amount1Delta));
+    }
+
+    function doSwap(
+        bool _zeroForOne,
+        int256 _amountSpecified,
+        uint160 _sqrtPriceLimitX96
+    ) public {
+        pool.swap(address(this), _zeroForOne, _amountSpecified, _sqrtPriceLimitX96, new bytes(0));
+    }
+
+    function setPool(UniswapV3Pool _pool) public {
+        pool = _pool;
+    }
+
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external {
+        if (amount0Owed > 0) token0.transfer(address(pool), amount0Owed);
+        if (amount1Owed > 0) token1.transfer(address(pool), amount1Owed);
+    }
+
+    function getTickLiquidityVars(int24 _tickLower, int24 _tickUpper)
+        internal
+        view
+        returns (
+            uint128,
+            int128,
+            uint128,
+            int128
+        )
+    {
+        (uint128 tL_liqGross, int128 tL_liqNet, , ) = pool.ticks(_tickLower);
+        (uint128 tU_liqGross, int128 tU_liqNet, , ) = pool.ticks(_tickUpper);
+        return (tL_liqGross, tL_liqNet, tU_liqGross, tU_liqNet);
+    }
+
+    function getStats(int24 _tickLower, int24 _tickUpper) internal view returns (MinterStats memory stats) {
+        (uint128 tL_lg, int128 tL_ln, uint128 tU_lg, int128 tU_ln) = getTickLiquidityVars(_tickLower, _tickUpper);
+        return MinterStats(pool.liquidity(), tL_lg, tL_ln, tU_lg, tU_ln);
+    }
+
+    function doMint(
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _amount
+    ) public {
+        pool.mint(address(this), _tickLower, _tickUpper, _amount, new bytes(0));
+    }
+
+    function doBurn(
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _amount
+    ) public {
+        pool.burn(_tickLower, _tickUpper, _amount);
+    }
+
+    function doCollectFromPool(
+        int24 lowerTick,
+        int24 upperTick,
+        address recipient,
+        uint128 amount0Requested,
+        uint128 amount1Requested
+    ) public {
+        pool.collect(recipient, lowerTick, upperTick, amount0Requested, amount1Requested);
+    }
+
+    function doTransfer(
+        address token,
+        address to,
+        uint256 amount
+    ) public {
+        ERC20(token).transfer(to, amount);
+    }
+
+    function doDeposit(uint128 liquidityAmount) public {
+        manager.deposit(liquidityAmount, address(this),0,0);
+    }
+
+    function doWithdraw(uint128 liquidityAmount) public returns (uint256 amount0, uint256 amount1) {
+        uint128 max_uint128 = uint128(0 - 1);
+        (amount0, amount1) = manager.withdraw(liquidityAmount, address(this));
+    }
+
+    function doApprove(
+        address token,
+        address who,
+        uint256 amount
+    ) public {
+        IERC20(token).approve(who, amount);
+    }
+}
+
+contract FuzzUser2Tranche {
+    GebUniswapV3TwoTrancheManager manager;
+    UniswapV3Pool pool;
+    TestToken token0;
+    TestToken token1;
+
+    struct MinterStats {
+        uint128 liq;
+        uint128 tL_liqGross;
+        int128 tL_liqNet;
+        uint128 tU_liqGross;
+        int128 tU_liqNet;
+    }
+
+    constructor(
+        GebUniswapV3TwoTrancheManager man,
         TestToken _token0,
         TestToken _token1
     ) public {

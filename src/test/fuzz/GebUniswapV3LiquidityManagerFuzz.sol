@@ -21,6 +21,7 @@ contract Fuzzer is E2E_swap {
     using SafeMath for uint256;
 
     int24 lastRebalancePrice;
+    uint swapCount;
     constructor() public {}
 
     // --- All Possible Actions ---
@@ -143,13 +144,18 @@ contract Fuzzer is E2E_swap {
 
         uint160 sqrtPriceLimitX96 = get_random_oneForZero_priceLimit(_amount);
         users[user % 4].doSwap(false, _amountSpecified, sqrtPriceLimitX96);
+        swapCount++;
+    }
+
+    function claim_management_fees() public {
+        if (swapCount > 0) {
+            assert(manager.unclaimedToken0() > 0 || manager.unclaimedToken1() > 0);
+            manager.claimManagementFees(address(0xFab));
+            assert(manager.unclaimedToken0() == 0 && manager.unclaimedToken1() == 0);
+        }
     }
 
     // --- Echidna Tests ---
-    // function echidna_sanity_check() public returns (bool) {
-    //     return address(manager) == address(0);
-    // }
-
     function echidna_position_integrity() public returns (bool) {
         if (!inited) {
             return true;
@@ -202,16 +208,6 @@ contract Fuzzer is E2E_swap {
         return (manager.totalSupply() == total);
     }
 
-    function echidna_manager_never_owns_tokens() public returns (bool) {
-        if (!inited) {
-            return true;
-        }
-        uint256 t0_bal = token0.balanceOf(address(manager));
-        uint256 t1_bal = token0.balanceOf(address(manager));
-
-        return t0_bal == 0 && t1_bal == 0;
-    }
-
     function echidna_manager_does_not_have_position_if_supply_is_zero() public returns (bool) {
         if (!inited) {
             return true;
@@ -245,7 +241,7 @@ contract Fuzzer is E2E_swap {
         oracle = new OracleLikeMock();
         pv = new PoolViewer();
 
-        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, 0, address(pool), oracle, pv,address(0));
+        manager = new GebUniswapV3LiquidityManager("Geb-Uniswap-Manager", "GUM", address(token0), threshold, delay, 10, address(pool), oracle, pv,address(0));
 
         u1 = new FuzzUser(manager, token0, token1);
         u2 = new FuzzUser(manager, token0, token1);
